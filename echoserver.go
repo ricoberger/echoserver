@@ -30,7 +30,7 @@ func main() {
 			return
 		}
 
-		fmt.Fprintf(w, "%q", dump)
+		fmt.Fprintf(w, "%s", string(dump))
 	})
 
 	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
