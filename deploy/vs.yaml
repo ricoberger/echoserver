@@ -1,0 +1,17 @@
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: echoserver
+  namespace: test
+spec:
+  hosts:
+    - example.com
+  gateways:
+    - istio-system/istio-default-gateway
+  http:
+    - route:
+        - destination:
+            host: echoserver.test.svc.cluster.local
+            port:
+              number: 8080

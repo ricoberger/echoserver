@@ -31,8 +31,10 @@ To deploy the `echoserver` at Kubernetes run the following commands:
 kubectl create namespace test
 kubectl label namespace test istio-injection=enabled
 
-kubectl apply -n test -f https://github.com/ricoberger/echoserver/blob/main/deploy/echoserver-deploy.yaml
-kubectl apply -n test -f https://github.com/ricoberger/echoserver/blob/main/deploy/echoserver-svc.yaml
+kubectl apply -n test -f https://raw.githubusercontent.com/ricoberger/echoserver/main/deploy/ns.yaml
+kubectl apply -n test -f https://raw.githubusercontent.com/ricoberger/echoserver/main/deploy/deploy.yaml
+kubectl apply -n test -f https://raw.githubusercontent.com/ricoberger/echoserver/main/deploy/svc.yaml
+kubectl apply -n test -f https://raw.githubusercontent.com/ricoberger/echoserver/main/deploy/vs.yaml
 ```
 
 ## Exmples
