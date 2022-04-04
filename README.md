@@ -6,6 +6,7 @@ Simple `echoserver`, which dumps HTTP requests.
 - `/health`: Return a 200 status code.
 - `/status`: Return a random status code, via the `?status=random` parameter or a the defined status code via the `?status=200` parameter.
 - `/timeout`: Wait the given amount of time (`?timeout=1m`) before returning a 200 status code.
+- `/headersize`: Returns a 200 status code with a header `X-Header-Size` of the size defined via `?size=1024`.
 
 ## Build
 

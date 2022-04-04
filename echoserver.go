@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -40,38 +41,57 @@ func main() {
 	router.HandleFunc("/status", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("host: %s, address: %s, method: %s, requestURI: %s, proto: %s, useragent: %s", r.Host, r.RemoteAddr, r.Method, r.RequestURI, r.Proto, r.UserAgent())
 
-		status, ok := r.URL.Query()["status"]
-		if !ok || len(status[0]) < 1 || status[0] == "random" {
+		statusString := r.URL.Query().Get("status")
+		if statusString == "" || statusString == "random" {
 			index := rand.Intn(len(randomStatusCodes))
 			w.WriteHeader(randomStatusCodes[index])
 			return
 		}
 
-		s, err := strconv.Atoi(status[0])
-		if err == nil {
-			w.WriteHeader(s)
+		status, err := strconv.Atoi(statusString)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		http.Error(w, fmt.Sprint(err), http.StatusInternalServerError)
+		w.WriteHeader(status)
 	}))
 
 	router.HandleFunc("/timeout", func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("host: %s, address: %s, method: %s, requestURI: %s, proto: %s, useragent: %s", r.Host, r.RemoteAddr, r.Method, r.RequestURI, r.Proto, r.UserAgent())
 
-		timeoutString, ok := r.URL.Query()["timeout"]
-		if !ok || len(timeoutString) < 1 {
-			w.WriteHeader(200)
+		timeoutString := r.URL.Query().Get("timeout")
+		if timeoutString == "" {
+			http.Error(w, "timout parameter is missing", http.StatusBadRequest)
 			return
 		}
 
-		timeout, err := time.ParseDuration(timeoutString[0])
+		timeout, err := time.ParseDuration(timeoutString)
 		if err != nil {
-			http.Error(w, fmt.Sprint(err), http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		time.Sleep(timeout)
+		w.WriteHeader(200)
+	})
+
+	router.HandleFunc("/headersize", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("host: %s, address: %s, method: %s, requestURI: %s, proto: %s, useragent: %s", r.Host, r.RemoteAddr, r.Method, r.RequestURI, r.Proto, r.UserAgent())
+
+		headerSizeString := r.URL.Query().Get("size")
+		if headerSizeString == "" {
+			http.Error(w, "size parameter is missing", http.StatusBadRequest)
+			return
+		}
+
+		size, err := strconv.Atoi(headerSizeString)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Add("X-Header-Size", strings.Repeat("0", size))
 		w.WriteHeader(200)
 	})
 
