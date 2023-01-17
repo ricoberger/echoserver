@@ -1,11 +1,11 @@
-FROM golang:1.15.6-alpine3.12 as build
+FROM golang:1.19.5-alpine3.17 as build
 WORKDIR /echoserver
 COPY go.mod  ./
 RUN go mod download
 COPY . .
-RUN go build
+RUN export CGO_ENABLED=0 && go build
 
-FROM alpine:3.12.0
+FROM alpine:3.17.1
 RUN apk update && apk add --no-cache ca-certificates
 RUN mkdir /echoserver
 COPY --from=build /echoserver/echoserver /echoserver
