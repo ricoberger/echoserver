@@ -20,8 +20,8 @@ go build
 When you are using Docker, you can use the following commands:
 
 ```sh
-docker build -f Dockerfile -t ricoberger/echoserver:latest .
-docker run -it --rm --name echotest -p 8080:8080 ricoberger/echoserver:latest
+docker build -f Dockerfile -t ghcr.io/ricoberger/echoserver:latest .
+docker run -it --rm --name echotest -p 8080:8080 ghcr.io/ricoberger/echoserver:latest
 ```
 
 ## Deploy

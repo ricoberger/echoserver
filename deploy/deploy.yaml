@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: echoserver
-          image: ricoberger/echoserver:latest
+          image: ghcr.io/ricoberger/echoserver:latest
           imagePullPolicy: Always
           ports:
             - name: http
