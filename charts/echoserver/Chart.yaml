@@ -1,0 +1,7 @@
+---
+apiVersion: v2
+name: echoserver
+description: Simple echoserver, which dumps HTTP requests
+type: application
+version: 1.0.0
+appVersion: v1.0.0
