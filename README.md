@@ -24,7 +24,7 @@ Via Docker the following commands can be used to build the image and run the `ec
 
 ```sh
 docker build -f ./cmd/echoserver/Dockerfile -t ghcr.io/ricoberger/echoserver:main .
-docker run -it --rm --name echotest -p 8080:8080 ghcr.io/ricoberger/echoserver:main
+docker run -it --rm --name echoserver -p 8080:8080 ghcr.io/ricoberger/echoserver:main
 ```
 
 The `echoserver` can also be deployed on Kubernetes via Helm:
