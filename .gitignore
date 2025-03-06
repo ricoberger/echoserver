@@ -1,1 +1,6 @@
-echoserver
+# Binaries
+/bin
+
+# Coverage
+coverage.out
+coverage.html
