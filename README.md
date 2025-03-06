@@ -8,6 +8,7 @@ Simple `echoserver`, which dumps HTTP requests.
 - `/status`: Returns a random status code, when the `status` parameter is empty or `random`. Return the status code specified in the `status` parameter, e.g. `?status=200`.
 - `/timeout`: Wait the given amount of time (`?timeout=1m`) before returning a 200 status code.
 - `/headersize`: Returns a 200 status code with a header `X-Header-Size` of the size defined via `?size=1024`.
+- `/request`: Returns the response of the requested server. The request body should have the following structure: `{"method": "POST", "url": "http://localhost:8080/", "body": "test", "headers": {"x-test": "test"}}`
 - `/metrics`: Returns the captured Prometheus metrics.
 
 ## Build
@@ -46,4 +47,5 @@ curl -vvv "http://localhost:8080/status"
 curl -vvv "http://localhost:8080/status?status=400"
 curl -vvv "http://localhost:8080/timeout?timeout=10s"
 curl -vvv "http://localhost:8080/headersize?size=100"
+curl -vvv -X POST -d '{"method": "POST", "url": "http://localhost:8080/", "body": "test", "headers": {"x-test": "test"}}' http://localhost:8080/request
 ```

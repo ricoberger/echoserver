@@ -59,6 +59,7 @@ func (c *Cli) run() error {
 	router.HandleFunc("/status", statusHandler)
 	router.HandleFunc("/timeout", timeoutHandler)
 	router.HandleFunc("/headersize", headerSizeHandler)
+	router.HandleFunc("/request", requestHandler)
 	router.Handle("/metrics", promhttp.Handler())
 
 	server := &http.Server{

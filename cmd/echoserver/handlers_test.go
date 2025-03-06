@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -163,6 +165,39 @@ func TestHeaderSizeHandler(t *testing.T) {
 
 		router := chi.NewRouter()
 		router.HandleFunc("/", headerSizeHandler)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+}
+
+func TestRequest(t *testing.T) {
+	t.Run("should return response from request target", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, "test data")
+		}))
+		defer server.Close()
+
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, "/", strings.NewReader(fmt.Sprintf(`{"method":"GET","url":"%s"}`, server.URL)))
+		w := httptest.NewRecorder()
+
+		router := chi.NewRouter()
+		router.HandleFunc("/", requestHandler)
+		router.ServeHTTP(w, req)
+
+		body, err := io.ReadAll(w.Body)
+		require.NoError(t, err)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, "test data", string(body))
+	})
+
+	t.Run("should return error when request body can not be parsed", func(t *testing.T) {
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, "/", strings.NewReader(`{"method":"GET","url":}`))
+		w := httptest.NewRecorder()
+
+		router := chi.NewRouter()
+		router.HandleFunc("/", requestHandler)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusBadRequest, w.Code)
