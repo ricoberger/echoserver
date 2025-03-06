@@ -11,34 +11,29 @@ Simple `echoserver`, which dumps HTTP requests.
 - `/request`: Returns the response of the requested server. The request body should have the following structure: `{"method": "POST", "url": "http://localhost:8080/", "body": "test", "headers": {"x-test": "test"}}`
 - `/metrics`: Returns the captured Prometheus metrics.
 
-## Build
+## Building and Running
 
-The `echoserver` can be built and run with the following commands:
+To build and run the `echoserver` the following commands can be used:
 
 ```sh
 make build
 ./bin/echoserver
 ```
 
-When you are using Docker, you can use the following commands:
+Via Docker the following commands can be used to build the image and run the `echoserver`:
 
 ```sh
 docker build -f ./cmd/echoserver/Dockerfile -t ghcr.io/ricoberger/echoserver:main .
 docker run -it --rm --name echotest -p 8080:8080 ghcr.io/ricoberger/echoserver:main
 ```
 
-## Deploy
-
-To deploy the `echoserver` at Kubernetes run the following commands:
+The `echoserver` can also be deployed on Kubernetes via Helm:
 
 ```sh
-kubectl apply -n test -f https://raw.githubusercontent.com/ricoberger/echoserver/main/deploy/ns.yaml
-kubectl apply -n test -f https://raw.githubusercontent.com/ricoberger/echoserver/main/deploy/deploy.yaml
-kubectl apply -n test -f https://raw.githubusercontent.com/ricoberger/echoserver/main/deploy/svc.yaml
-kubectl apply -n test -f https://raw.githubusercontent.com/ricoberger/echoserver/main/deploy/vs.yaml
+helm upgrade --install echoserver oci://ghcr.io/ricoberger/charts/echoserver --version 1.0.0
 ```
 
-## Exmples
+## Examples
 
 ```sh
 curl -vvv "http://localhost:8080/"

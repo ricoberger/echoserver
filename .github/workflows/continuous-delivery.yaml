@@ -59,3 +59,33 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}:${{ env.TAG }}
             ricoberger/echoserver:${{ env.TAG }}
+
+  helm:
+    name: Helm
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set Version
+        id: version
+        run: |
+          echo VERSION=$(yq -r .version ./charts/echoserver/Chart.yaml) >> $GITHUB_ENV
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ghcr.io
+
+      - name: Package and Push Helm Chart
+        run: |
+          helm package ./charts/echoserver --version ${{ env.VERSION }}
+          helm push ./echoserver-${{ env.VERSION }}.tgz oci://ghcr.io/${{ github.repository_owner }}/charts

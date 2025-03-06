@@ -1,0 +1,157 @@
+---
+# Default values for echoserver.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+nameOverride: ""
+fullnameOverride: ""
+
+## The number of Pods, which are created by the Deployment.
+## See: https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
+##
+replicaCount: 1
+
+## Specify a list of image pull secrets, to avoid the DockerHub rate limit or to pull the echoserver image from
+## a private registry.
+## See: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+##
+imagePullSecrets: []
+
+## Set the image which should be used for echoserver.
+##
+image:
+  repository: ghcr.io/ricoberger/echoserver
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+## Specify security settings for the created Pods. To set the security settings for the echoserver Container use
+## the corresponding "securityContext" field.
+## See: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod
+##
+podSecurityContext: {}
+# fsGroup: 2000
+
+## Specify security settings for the echoserver Container. They override settings made at the Pod level via the
+## "podSecurityContext" when there is overlap.
+## See: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-container
+##
+securityContext: {}
+# capabilities:
+#   drop:
+#   - ALL
+# readOnlyRootFilesystem: true
+# runAsNonRoot: true
+# runAsUser: 1000
+
+## We usually recommend not to specify default resources and to leave this as a conscious choice for the user. This
+## also increases chances charts run on environments with little resources, such as Minikube. If you do want to
+## specify resources, uncomment the following lines, adjust them as necessary, and remove the curly braces after
+## 'resources:'.
+##
+resources: {}
+# limits:
+#   cpu: 100m
+#   memory: 128Mi
+# requests:
+#   cpu: 100m
+#   memory: 128Mi
+
+## Specify a map of key-value pairs, to assign the Pods to a specific set of nodes.
+## See: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
+##
+nodeSelector: {}
+
+## Specify the tolerations for the echoserver Pods.
+## See: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
+##
+tolerations: []
+
+## Specify a node affinity or inter-pod affinity / anti-affinity for an advanced scheduling of the echoserver
+## Pods.
+## See: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity
+##
+affinity: {}
+
+## Topology spread constraints rely on node labels to identify the topology domain(s) that each Node is in.
+## See: https://kubernetes.io/docs/concepts/workloads/pods/pod-topology-spread-constraints/
+##
+topologySpreadConstraints: []
+# - maxSkew: 1
+#   topologyKey: topology.kubernetes.io/zone
+#   whenUnsatisfiable: DoNotSchedule
+#   labelSelector:
+#     matchLabels:
+#       app.kubernetes.io/name=hub
+
+## Specify additional volumes for the echoserver deployment.
+## See: https://kubernetes.io/docs/concepts/storage/volumes/
+##
+volumes: []
+
+## Specify additional volumeMounts for the echoserver container.
+## See: https://kubernetes.io/docs/concepts/storage/volumes/
+##
+volumeMounts: []
+
+## Specify additional environment variables for the echoserver container.
+##
+env: []
+# - name: AZURE_SUBSCRIPTION_ID
+#   value: MY_ENV_VALUE
+# - name: AZURE_TENANT_ID
+#   value: MY_ENV_VALUE
+# - name: AZURE_CLIENT_ID
+#   value: MY_ENV_VALUE
+# - name: AZURE_CLIENT_SECRET
+#   value: MY_ENV_VALUE
+
+## Specify additional labels and annotations for the created Pods.
+##
+podAnnotations: {}
+podLabels: {}
+
+## Set the type for the created service: ClusterIP, NodePort, LoadBalancer.
+## See: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
+##
+service:
+  type: ClusterIP
+
+  annotations: {}
+  labels: {}
+
+serviceAccount:
+  name: ""
+
+## Create a Service Monitor for the Prometheus Operator.
+## See: https://github.com/coreos/prometheus-operator
+##
+serviceMonitor:
+  ## If true, a ServiceMonitor CRD is created for a Prometheus Operator
+  ##
+  enabled: false
+  additionalMetricsRelabels: {}
+  additionalRelabeling: []
+  labels: {}
+  path: /metrics
+  interval: 30s
+  scrapeTimeout: 30s
+
+## This block is for setting up the ingress.
+## See: https://kubernetes.io/docs/concepts/services-networking/ingress/
+##
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  # kubernetes.io/ingress.class: nginx
+  # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: echoserver.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
