@@ -39,7 +39,7 @@ func echoHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	render.Status(r, http.StatusOK)
-	render.Data(w, r, dump)
+	render.PlainText(w, r, string(dump))
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
@@ -47,7 +47,7 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	defer span.End()
 
 	render.Status(r, http.StatusOK)
-	render.Data(w, r, []byte("OK"))
+	render.PlainText(w, r, "OK")
 }
 
 func panicHandler(w http.ResponseWriter, r *http.Request) {
@@ -78,7 +78,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 		status := randomStatusCodes[index.Int64()]
 
 		render.Status(r, status)
-		render.Data(w, r, []byte(http.StatusText(status)))
+		render.PlainText(w, r, http.StatusText(status))
 		return
 	}
 
@@ -93,7 +93,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	render.Status(r, status)
-	render.Data(w, r, []byte(http.StatusText(status)))
+	render.PlainText(w, r, http.StatusText(status))
 }
 
 func timeoutHandler(w http.ResponseWriter, r *http.Request) {
@@ -125,7 +125,7 @@ func timeoutHandler(w http.ResponseWriter, r *http.Request) {
 	time.Sleep(timeout)
 
 	render.Status(r, http.StatusOK)
-	render.Data(w, r, []byte(http.StatusText(http.StatusOK)))
+	render.PlainText(w, r, http.StatusText(http.StatusOK))
 }
 
 func headerSizeHandler(w http.ResponseWriter, r *http.Request) {
@@ -156,7 +156,7 @@ func headerSizeHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Add("X-Header-Size", strings.Repeat("0", size))
 	render.Status(r, http.StatusOK)
-	render.Data(w, r, []byte(http.StatusText(http.StatusOK)))
+	render.PlainText(w, r, http.StatusText(http.StatusOK))
 }
 
 var httpClient = &http.Client{
@@ -226,5 +226,5 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	render.Status(r, resp.StatusCode)
-	render.Data(w, r, body)
+	render.PlainText(w, r, string(body))
 }
