@@ -1,7 +1,6 @@
 module github.com/ricoberger/echoserver
 
-go 1.22.0
-toolchain go1.24.0
+go 1.24.0
 
 require (
 	github.com/alecthomas/kong v1.8.1
