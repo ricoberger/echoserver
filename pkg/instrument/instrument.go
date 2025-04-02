@@ -127,7 +127,7 @@ func handleInstrumentation(requestInfo *RequestInfo) func(next http.Handler) htt
 						slog.String("requestProto", r.Proto),
 						slog.String("requestMethod", r.Method),
 						slog.String("requestAddr", r.RemoteAddr),
-						slog.String("requestUserAgent", strings.Replace(strings.Replace(r.UserAgent(), "\n", "", -1), "\r", "", -1)),
+						slog.String("requestUserAgent", strings.ReplaceAll(strings.ReplaceAll(r.UserAgent(), "\n", ""), "\r", "")),
 						slog.String("requestURI", fmt.Sprintf("%s://%s%s", scheme, r.Host, r.RequestURI)),
 						slog.Int("responseStatus", 500),
 						slog.String("error", fmt.Sprintf("%v", err)),
@@ -162,7 +162,7 @@ func handleInstrumentation(requestInfo *RequestInfo) func(next http.Handler) htt
 						slog.String("requestProto", r.Proto),
 						slog.String("requestMethod", r.Method),
 						slog.String("requestAddr", r.RemoteAddr),
-						slog.String("requestUserAgent", strings.Replace(strings.Replace(r.UserAgent(), "\n", "", -1), "\r", "", -1)),
+						slog.String("requestUserAgent", strings.ReplaceAll(strings.ReplaceAll(r.UserAgent(), "\n", ""), "\r", "")),
 						slog.String("requestURI", fmt.Sprintf("%s://%s%s", scheme, r.Host, r.RequestURI)),
 						slog.Int("responseStatus", status),
 					)
@@ -174,7 +174,7 @@ func handleInstrumentation(requestInfo *RequestInfo) func(next http.Handler) htt
 						slog.String("requestProto", r.Proto),
 						slog.String("requestMethod", r.Method),
 						slog.String("requestAddr", r.RemoteAddr),
-						slog.String("requestUserAgent", strings.Replace(strings.Replace(r.UserAgent(), "\n", "", -1), "\r", "", -1)),
+						slog.String("requestUserAgent", strings.ReplaceAll(strings.ReplaceAll(r.UserAgent(), "\n", ""), "\r", "")),
 						slog.String("requestURI", fmt.Sprintf("%s://%s%s", scheme, r.Host, r.RequestURI)),
 						slog.Int("responseStatus", status),
 					)
