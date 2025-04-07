@@ -1,8 +1,9 @@
 module github.com/ricoberger/echoserver
 
 go 1.24.0
+
 require (
-	github.com/alecthomas/kong v1.9.0
+	github.com/alecthomas/kong v1.10.0
 	github.com/felixge/httpsnoop v1.0.4
 	github.com/go-chi/chi/v5 v5.2.1
 	github.com/go-chi/render v1.0.3
