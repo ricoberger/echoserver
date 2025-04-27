@@ -37,7 +37,7 @@ docker run -it --rm --name echoserver -p 8080:8080 ghcr.io/ricoberger/echoserver
 The `echoserver` can also be deployed on Kubernetes via Helm:
 
 ```sh
-helm upgrade --install echoserver oci://ghcr.io/ricoberger/charts/echoserver --version 1.0.0
+helm upgrade --install echoserver oci://ghcr.io/ricoberger/charts/echoserver --version <VERSION>
 ```
 
 ## Examples
