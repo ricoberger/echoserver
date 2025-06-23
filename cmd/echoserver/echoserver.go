@@ -19,6 +19,7 @@ import (
 	"github.com/ricoberger/echoserver/pkg/version"
 
 	"github.com/alecthomas/kong"
+	"github.com/felixge/fgprof"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -73,6 +74,7 @@ func (c *Cli) run() error {
 	router.Handle("/debug/pprof/mutex", pprof.Handler("mutex"))
 	router.Handle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
 	router.Handle("/debug/pprof/trace", pprof.Handler("trace"))
+	router.Handle("/debug/pprof/fgprof", fgprof.Handler())
 
 	server := &http.Server{
 		Addr:              c.Address,
