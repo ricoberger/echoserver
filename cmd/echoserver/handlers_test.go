@@ -203,3 +203,42 @@ func TestRequest(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, w.Code)
 	})
 }
+
+func TestFibonacciHandler(t *testing.T) {
+	t.Run("should return fibonacci number", func(t *testing.T) {
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/?n=10", nil)
+		w := httptest.NewRecorder()
+
+		router := chi.NewRouter()
+		router.HandleFunc("/", fibonacciHandler)
+		router.ServeHTTP(w, req)
+
+		body, err := io.ReadAll(w.Body)
+		require.NoError(t, err)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, "55", string(body))
+	})
+
+	t.Run("should return error if parameter 'n' is missing", func(t *testing.T) {
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+		w := httptest.NewRecorder()
+
+		router := chi.NewRouter()
+		router.HandleFunc("/", fibonacciHandler)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("should return error if parameter 'n' is not a number", func(t *testing.T) {
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/?n=invalid", nil)
+		w := httptest.NewRecorder()
+
+		router := chi.NewRouter()
+		router.HandleFunc("/", fibonacciHandler)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+}

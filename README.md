@@ -15,6 +15,9 @@ Simple `echoserver`, which dumps HTTP requests.
 - `/request`: Returns the response of the requested server. The request body
   should have the following structure:
   `{"method": "POST", "url": "http://localhost:8080/", "body": "test", "headers": {"x-test": "test"}}`
+- `/fibonacci`: Returns the Fibonacci number for the given `n` parameter, e.g.
+  `?n=100`. The intention behind this endpoint is to simulate a CPU-intensive
+  task.
 - `/metrics`: Returns the captured Prometheus metrics.
 
 ## Building and Running
@@ -50,4 +53,5 @@ curl -vvv "http://localhost:8080/status?status=400"
 curl -vvv "http://localhost:8080/timeout?timeout=10s"
 curl -vvv "http://localhost:8080/headersize?size=100"
 curl -vvv -X POST -d '{"method": "POST", "url": "http://localhost:8080/", "body": "test", "headers": {"x-test": "test"}}' http://localhost:8080/request
+curl -vvv "http://localhost:8080/fibonacci?n=100"
 ```

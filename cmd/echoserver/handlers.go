@@ -228,3 +228,48 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 	render.Status(r, resp.StatusCode)
 	render.PlainText(w, r, string(body))
 }
+
+func fibonacci(n uint64) (*big.Int, *big.Int) {
+	if n == 0 {
+		return big.NewInt(0), big.NewInt(1)
+	}
+	a, b := fibonacci(n / 2)
+	c := big.NewInt(0).Mul(a, big.NewInt(0).Sub(big.NewInt(0).Mul(b, big.NewInt(2)), a))
+	d := big.NewInt(0).Add(big.NewInt(0).Mul(a, a), big.NewInt(0).Mul(b, b))
+	if n%2 == 0 {
+		return c, d
+	}
+	return d, big.NewInt(0).Add(d, c)
+}
+
+func fibonacciHandler(w http.ResponseWriter, r *http.Request) {
+	ctx, span := handlerTracer.Start(r.Context(), "fibonacciHandler")
+	defer span.End()
+
+	nString := r.URL.Query().Get("n")
+	if nString == "" {
+		err := fmt.Errorf("n parameter is missing")
+
+		slog.ErrorContext(ctx, "Parameter 'n' is missing.", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	n, err := strconv.ParseUint(nString, 10, 64)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to parse 'n' parameter.", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	res, _ := fibonacci(n)
+
+	render.Status(r, http.StatusOK)
+	render.PlainText(w, r, res.String())
+}
