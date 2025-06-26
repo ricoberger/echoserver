@@ -1,6 +1,10 @@
 # echoserver
 
-Simple `echoserver`, which dumps HTTP requests.
+The `echoserver` is a HTTP server written in Go, which was mainly written to
+dump HTTP requests. Nowdays it can also be used to test / showcase the
+instrumentation of a Go application with metrics, logs, traces and profiles. It
+can also be used to test the timeout / header size configuration of a reverse
+proxy. The following endpoints are available:
 
 - `/`: Dump the HTTP request.
 - `/health`: Returns a 200 status code.
