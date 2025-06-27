@@ -63,6 +63,7 @@ func (c *Cli) run() error {
 	router.HandleFunc("/headersize", headerSizeHandler)
 	router.HandleFunc("/request", requestHandler)
 	router.HandleFunc("/fibonacci", fibonacciHandler)
+	router.HandleFunc("/websocket", websocketHandler)
 	router.Handle("/metrics", promhttp.Handler())
 	router.HandleFunc("/debug/pprof", pprof.Index)
 	router.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
