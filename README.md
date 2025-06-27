@@ -47,6 +47,21 @@ The `echoserver` can also be deployed on Kubernetes via Helm:
 helm upgrade --install echoserver oci://ghcr.io/ricoberger/charts/echoserver --version <VERSION>
 ```
 
+## Configuration
+
+```plantext
+Usage: echoserver [flags]
+
+Flags:
+  -h, --help                               Show context-sensitive help.
+      --address=":8080"                    The address where the server should listen on ($ADDRESS).
+      --log.format="console"               Set the output format of the logs. Must be "console" or "json" ($LOG_FORMAT).
+      --log.level=INFO                     Set the log level. Must be "DEBUG", "INFO", "WARN" or "ERROR" ($LOG_LEVEL).
+      --tracer.enabled                     Enable tracing ($TRACER_ENABLED).
+      --tracer.service="echoserver"        The name of the service which should be used for tracing ($TRACER_SERVICE).
+      --tracer.address="localhost:4317"    The address of the tracing provider instance ($TRACER_ADDRESS).
+```
+
 ## Examples
 
 ```sh
