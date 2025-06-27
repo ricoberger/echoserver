@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/go-chi/render"
+	"github.com/gorilla/websocket"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
@@ -272,4 +273,68 @@ func fibonacciHandler(w http.ResponseWriter, r *http.Request) {
 
 	render.Status(r, http.StatusOK)
 	render.PlainText(w, r, res.String())
+}
+
+var upgrader = websocket.Upgrader{}
+
+func websocketHandler(w http.ResponseWriter, r *http.Request) {
+	ctx, span := handlerTracer.Start(r.Context(), "websocketHandler")
+	defer span.End()
+
+	c, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to upgrade connection.", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return
+	}
+	defer c.Close()
+
+	ticker := time.NewTicker(25 * time.Second)
+	defer ticker.Stop()
+
+	c.SetReadDeadline(time.Now().Add(30 * time.Second))
+
+	c.SetPongHandler(func(string) error {
+		slog.DebugContext(ctx, "Received pong from client.")
+		c.SetReadDeadline(time.Now().Add(30 * time.Second))
+		return nil
+	})
+
+	go func() {
+		for {
+			<-ticker.C
+
+			slog.DebugContext(ctx, "Sent ping to client.")
+
+			if err := c.WriteMessage(websocket.PingMessage, nil); err != nil {
+				slog.ErrorContext(ctx, "Failed to send ping.", slog.Any("error", err))
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				return
+			}
+		}
+	}()
+
+	for {
+		mt, message, err := c.ReadMessage()
+		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure) {
+				slog.ErrorContext(ctx, "Failed to read message.", slog.Any("error", err))
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+			}
+			break
+		}
+
+		slog.DebugContext(ctx, "Received message.", slog.String("message", string(message)))
+
+		err = c.WriteMessage(mt, message)
+		if err != nil {
+			slog.ErrorContext(ctx, "Failed to write message.", slog.Any("error", err))
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			break
+		}
+	}
 }

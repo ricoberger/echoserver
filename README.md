@@ -22,6 +22,8 @@ proxy. The following endpoints are available:
 - `/fibonacci`: Returns the Fibonacci number for the given `n` parameter, e.g.
   `?n=100`. The intention behind this endpoint is to simulate a CPU-intensive
   task.
+- `/websocket`: Can be used to test WebSocket connections. It returns the
+  message sent over the WebSocket connection.
 - `/metrics`: Returns the captured Prometheus metrics.
 
 ## Building and Running

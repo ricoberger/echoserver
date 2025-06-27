@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 )
 
@@ -240,5 +241,25 @@ func TestFibonacciHandler(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+}
+
+func TestWebsocketHandler(t *testing.T) {
+	t.Run("should echo messages over websocket", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(websocketHandler))
+		defer server.Close()
+
+		//nolint:bodyclose
+		client, _, err := websocket.DefaultDialer.Dial(fmt.Sprintf("ws%s", strings.TrimPrefix(server.URL, "http")), nil)
+		require.NoError(t, err)
+		defer client.Close()
+
+		message := []byte("test")
+		err = client.WriteMessage(websocket.TextMessage, message)
+		require.NoError(t, err)
+
+		_, response, err := client.ReadMessage()
+		require.NoError(t, err)
+		require.Equal(t, "test", string(response))
 	})
 }
