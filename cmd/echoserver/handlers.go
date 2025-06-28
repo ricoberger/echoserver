@@ -23,7 +23,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 )
 
-var handlerTracer = otel.Tracer("techdocs")
+var handlerTracer = otel.Tracer("handler")
 
 func echoHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, span := handlerTracer.Start(r.Context(), "echoHandler")
