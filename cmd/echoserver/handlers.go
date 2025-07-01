@@ -20,6 +20,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 )
 
@@ -61,6 +62,7 @@ func panicHandler(w http.ResponseWriter, r *http.Request) {
 func statusHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, span := handlerTracer.Start(r.Context(), "statusHandler")
 	defer span.End()
+	span.SetAttributes(attribute.Key("http.parameter.status").String(r.URL.Query().Get("status")))
 
 	randomStatusCodes := []int{200, 200, 200, 200, 200, 400, 500, 502, 503}
 
@@ -100,6 +102,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 func timeoutHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, span := handlerTracer.Start(r.Context(), "timeoutHandler")
 	defer span.End()
+	span.SetAttributes(attribute.Key("http.parameter.timeout").String(r.URL.Query().Get("timeout")))
 
 	timeoutString := r.URL.Query().Get("timeout")
 	if timeoutString == "" {
@@ -132,6 +135,7 @@ func timeoutHandler(w http.ResponseWriter, r *http.Request) {
 func headerSizeHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, span := handlerTracer.Start(r.Context(), "headerSizeHandler")
 	defer span.End()
+	span.SetAttributes(attribute.Key("http.parameter.size").String(r.URL.Query().Get("size")))
 
 	headerSizeString := r.URL.Query().Get("size")
 	if headerSizeString == "" {
@@ -246,6 +250,7 @@ func fibonacci(n uint64) (*big.Int, *big.Int) {
 func fibonacciHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, span := handlerTracer.Start(r.Context(), "fibonacciHandler")
 	defer span.End()
+	span.SetAttributes(attribute.Key("http.parameter.n").String(r.URL.Query().Get("n")))
 
 	nString := r.URL.Query().Get("n")
 	if nString == "" {
@@ -269,7 +274,9 @@ func fibonacciHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	span.AddEvent("fibonacci.start")
 	res, _ := fibonacci(n)
+	span.AddEvent("fibonacci.done")
 
 	render.Status(r, http.StatusOK)
 	render.PlainText(w, r, res.String())
@@ -297,6 +304,7 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 
 	c.SetPongHandler(func(string) error {
 		slog.DebugContext(ctx, "Received pong from client.")
+		span.AddEvent("Received pong from client.")
 		c.SetReadDeadline(time.Now().Add(30 * time.Second))
 		return nil
 	})
@@ -306,6 +314,7 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 			<-ticker.C
 
 			slog.DebugContext(ctx, "Sent ping to client.")
+			span.AddEvent("Sent ping to client.")
 
 			if err := c.WriteMessage(websocket.PingMessage, nil); err != nil {
 				slog.ErrorContext(ctx, "Failed to send ping.", slog.Any("error", err))
@@ -328,6 +337,7 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		slog.DebugContext(ctx, "Received message.", slog.String("message", string(message)))
+		span.AddEvent(fmt.Sprintf("Received message: %s", string(message)))
 
 		err = c.WriteMessage(mt, message)
 		if err != nil {
