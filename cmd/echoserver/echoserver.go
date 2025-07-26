@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
 	"log/slog"
 	"net/http"
 	"net/http/pprof"
@@ -41,9 +40,11 @@ func main() {
 }
 
 func (c *Cli) run() error {
+	ctx := context.Background()
+
 	logger := logger.New(c.Log)
-	logger.Info("Version information.", "version", slog.GroupValue(version.Info()...))
-	logger.Info("Build information.", "build", slog.GroupValue(version.BuildContext()...))
+	logger.InfoContext(ctx, "Version information.", "version", slog.GroupValue(version.Info()...))
+	logger.InfoContext(ctx, "Build information.", "build", slog.GroupValue(version.BuildContext()...))
 
 	tracer, err := tracer.New(c.Tracer)
 	if err != nil {
@@ -86,9 +87,9 @@ func (c *Cli) run() error {
 
 	go func() {
 		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-			slog.Error("Server died unexpected.", slog.Any("error", err))
+			slog.ErrorContext(ctx, "Server died unexpected.", slog.Any("error", err))
 		}
-		slog.Error("Server stopped.")
+		slog.ErrorContext(ctx, "Server stopped.")
 	}()
 
 	// All components should be terminated gracefully. For that we are listen
@@ -98,18 +99,19 @@ func (c *Cli) run() error {
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
 
-	logger.Debug("Start listining for SIGINT and SIGTERM signal.")
+	logger.DebugContext(ctx, "Start listining for SIGINT and SIGTERM signal.")
 	<-done
-	logger.Info("Shutdown started.")
+	logger.InfoContext(ctx, "Shutdown started.")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
-		log.Fatalf("HTTP shutdown error: %v", err)
+		logger.ErrorContext(ctx, "HTTP server shutdown error", slog.Any("error", err))
+		return err
 	}
 
-	logger.Info("Shutdown done.")
+	logger.InfoContext(ctx, "Shutdown done.")
 
 	return nil
 }
