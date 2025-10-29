@@ -126,7 +126,13 @@ func timeoutHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	time.Sleep(timeout)
+	select {
+	case <-ctx.Done():
+		render.Status(r, http.StatusBadRequest)
+		render.PlainText(w, r, http.StatusText(http.StatusBadRequest))
+		return
+	case <-time.After(timeout):
+	}
 
 	render.Status(r, http.StatusOK)
 	render.PlainText(w, r, http.StatusText(http.StatusOK))
