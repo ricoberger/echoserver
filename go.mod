@@ -5,7 +5,7 @@ go 1.24.0
 require (
 	github.com/alecthomas/kong v1.12.1
 	github.com/felixge/fgprof v0.9.5
-	github.com/felixge/httpsnoop v1.0.4
+	github.com/felixge/httpsnoop v1.0.5-0.20250604085516-9a9390b3efa8
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/go-chi/render v1.0.3
 	github.com/gorilla/websocket v1.5.3
