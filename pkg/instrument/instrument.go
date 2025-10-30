@@ -58,7 +58,7 @@ func Handler() func(next http.Handler) http.Handler {
 			var requestInfo = &RequestInfo{}
 			r = r.WithContext(context.WithValue(r.Context(), RequestInfoKey, requestInfo))
 
-			handler := handleInstrumentation(requestInfo)(next)
+			handler := handleTraces(requestInfo)(next)
 
 			requestInfo.Metrics = &httpsnoop.Metrics{
 				Code: http.StatusOK,
@@ -66,11 +66,12 @@ func Handler() func(next http.Handler) http.Handler {
 			requestInfo.Metrics.CaptureMetrics(w, func(ww http.ResponseWriter) {
 				handler.ServeHTTP(ww, r)
 			})
+			handleMetricsAndLogs(r, requestInfo)
 		})
 	}
 }
 
-func handleInstrumentation(requestInfo *RequestInfo) func(next http.Handler) http.Handler {
+func handleTraces(requestInfo *RequestInfo) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
@@ -102,14 +103,6 @@ func handleInstrumentation(requestInfo *RequestInfo) func(next http.Handler) htt
 				span.SetName(fmt.Sprintf("%s:%s", r.Method, routeStr))
 
 				if err := recover(); err != nil {
-					path := chi.RouteContext(r.Context()).RoutePattern()
-					duration := requestInfo.Metrics.Duration
-					written := requestInfo.Metrics.Written
-
-					reqCount.WithLabelValues(strconv.Itoa(http.StatusInternalServerError), r.Method, path).Inc()
-					reqDurationSum.WithLabelValues(strconv.Itoa(http.StatusInternalServerError), r.Method, path).Observe(duration.Seconds())
-					respSizeSum.WithLabelValues(strconv.Itoa(http.StatusInternalServerError), r.Method, path).Observe(float64(written))
-
 					span.SetAttributes(semconv.HTTPResponseStatusCode(500))
 					span.SetStatus(codes.Error, fmt.Sprintf("%v", err))
 
@@ -120,21 +113,8 @@ func handleInstrumentation(requestInfo *RequestInfo) func(next http.Handler) htt
 					))
 					span.End()
 
-					slog.ErrorContext(
-						r.Context(),
-						"Request completed.",
-						slog.String("requestScheme", scheme),
-						slog.String("requestProto", r.Proto),
-						slog.String("requestMethod", r.Method),
-						slog.String("requestAddr", r.RemoteAddr),
-						slog.String("requestUserAgent", strings.ReplaceAll(strings.ReplaceAll(r.UserAgent(), "\n", ""), "\r", "")),
-						slog.String("requestURI", fmt.Sprintf("%s://%s%s", scheme, r.Host, r.RequestURI)),
-						slog.Int("responseStatus", 500),
-						slog.String("error", fmt.Sprintf("%v", err)),
-						slog.String("stack", string(debug.Stack())),
-					)
-
-					panic(err)
+					slog.ErrorContext(ctx, "Recover panic.", slog.String("error", fmt.Sprintf("%v", err)), slog.String("stack", string(debug.Stack())))
+					http.Error(w, fmt.Sprintf("%#v", err), http.StatusInternalServerError)
 				}
 			}()
 
@@ -142,44 +122,62 @@ func handleInstrumentation(requestInfo *RequestInfo) func(next http.Handler) htt
 			next.ServeHTTP(w, r)
 
 			if requestInfo.Metrics != nil {
-				path := chi.RouteContext(r.Context()).RoutePattern()
 				status := requestInfo.Metrics.Code
-				duration := requestInfo.Metrics.Duration
 				written := requestInfo.Metrics.Written
-
-				reqCount.WithLabelValues(strconv.Itoa(status), r.Method, path).Inc()
-				reqDurationSum.WithLabelValues(strconv.Itoa(status), r.Method, path).Observe(duration.Seconds())
-				respSizeSum.WithLabelValues(strconv.Itoa(status), r.Method, path).Observe(float64(written))
 
 				span.SetAttributes(semconv.HTTPResponseSize(int(written)))
 				span.SetAttributes(semconv.HTTPResponseStatusCode(status))
-
-				if status >= 500 {
-					slog.ErrorContext(
-						r.Context(),
-						"Request completed.",
-						slog.String("requestScheme", scheme),
-						slog.String("requestProto", r.Proto),
-						slog.String("requestMethod", r.Method),
-						slog.String("requestAddr", r.RemoteAddr),
-						slog.String("requestUserAgent", strings.ReplaceAll(strings.ReplaceAll(r.UserAgent(), "\n", ""), "\r", "")),
-						slog.String("requestURI", fmt.Sprintf("%s://%s%s", scheme, r.Host, r.RequestURI)),
-						slog.Int("responseStatus", status),
-					)
-				} else {
-					slog.InfoContext(
-						r.Context(),
-						"Request completed.",
-						slog.String("requestScheme", scheme),
-						slog.String("requestProto", r.Proto),
-						slog.String("requestMethod", r.Method),
-						slog.String("requestAddr", r.RemoteAddr),
-						slog.String("requestUserAgent", strings.ReplaceAll(strings.ReplaceAll(r.UserAgent(), "\n", ""), "\r", "")),
-						slog.String("requestURI", fmt.Sprintf("%s://%s%s", scheme, r.Host, r.RequestURI)),
-						slog.Int("responseStatus", status),
-					)
-				}
+				//nolint:gosec
+				span.SetStatus(codes.Code(status), http.StatusText(status))
 			}
 		})
+	}
+}
+
+func handleMetricsAndLogs(r *http.Request, requestInfo *RequestInfo) {
+	if requestInfo.Metrics != nil {
+		path := chi.RouteContext(r.Context()).RoutePattern()
+		status := requestInfo.Metrics.Code
+		duration := requestInfo.Metrics.Duration
+		written := requestInfo.Metrics.Written
+
+		reqCount.WithLabelValues(strconv.Itoa(status), r.Method, path).Inc()
+		reqDurationSum.WithLabelValues(strconv.Itoa(status), r.Method, path).Observe(duration.Seconds())
+		respSizeSum.WithLabelValues(strconv.Itoa(status), r.Method, path).Observe(float64(written))
+
+		scheme := "http"
+		if r.TLS != nil {
+			scheme = "https"
+		}
+
+		if status >= 500 {
+			slog.ErrorContext(
+				r.Context(),
+				"Request completed.",
+				slog.String("requestScheme", scheme),
+				slog.String("requestProto", r.Proto),
+				slog.String("requestMethod", r.Method),
+				slog.String("requestAddr", r.RemoteAddr),
+				slog.String("requestUserAgent", strings.ReplaceAll(strings.ReplaceAll(r.UserAgent(), "\n", ""), "\r", "")),
+				slog.String("requestURI", fmt.Sprintf("%s://%s%s", scheme, r.Host, r.RequestURI)),
+				slog.Duration("requestDuration", duration),
+				slog.Int("responseStatus", status),
+				slog.Int64("responseSize", written),
+			)
+		} else {
+			slog.InfoContext(
+				r.Context(),
+				"Request completed.",
+				slog.String("requestScheme", scheme),
+				slog.String("requestProto", r.Proto),
+				slog.String("requestMethod", r.Method),
+				slog.String("requestAddr", r.RemoteAddr),
+				slog.String("requestUserAgent", strings.ReplaceAll(strings.ReplaceAll(r.UserAgent(), "\n", ""), "\r", "")),
+				slog.String("requestURI", fmt.Sprintf("%s://%s%s", scheme, r.Host, r.RequestURI)),
+				slog.Duration("requestDuration", duration),
+				slog.Int("responseStatus", status),
+				slog.Int64("responseSize", written),
+			)
+		}
 	}
 }

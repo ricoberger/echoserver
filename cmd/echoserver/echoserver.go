@@ -14,7 +14,6 @@ import (
 	"github.com/ricoberger/echoserver/pkg/instrument"
 	"github.com/ricoberger/echoserver/pkg/instrument/logger"
 	"github.com/ricoberger/echoserver/pkg/instrument/tracer"
-	"github.com/ricoberger/echoserver/pkg/recoverer"
 	"github.com/ricoberger/echoserver/pkg/version"
 
 	"github.com/alecthomas/kong"
@@ -51,7 +50,6 @@ func (c *Cli) run() error {
 	defer tracer.Shutdown()
 
 	router := chi.NewRouter()
-	router.Use(recoverer.Handler)
 	router.Use(middleware.RequestID)
 	router.Use(instrument.Handler())
 	router.HandleFunc("/", echoHandler)

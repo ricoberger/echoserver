@@ -55,7 +55,7 @@ func TestHandler(t *testing.T) {
 			panic("test")
 		})
 
-		require.Panics(t, func() {
+		require.NotPanics(t, func() {
 			router.ServeHTTP(w, req)
 		})
 	})
