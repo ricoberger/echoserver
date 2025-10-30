@@ -3,5 +3,5 @@ apiVersion: v2
 name: echoserver
 description: Simple echoserver, which dumps HTTP requests
 type: application
-version: 1.0.3
-appVersion: v1.1.0
+version: 1.0.4
+appVersion: v1.2.0
