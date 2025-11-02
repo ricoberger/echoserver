@@ -19,20 +19,17 @@ import (
 	"github.com/gorilla/websocket"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 )
 
-var handlerTracer = otel.Tracer("handler")
-
 func echoHandler(w http.ResponseWriter, r *http.Request) {
-	ctx, span := handlerTracer.Start(r.Context(), "echoHandler")
+	ctx, span := tracer.Start(r.Context(), "echoHandler")
 	defer span.End()
 
 	dump, err := httputil.DumpRequest(r, true)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to dump request.", slog.Any("error", err))
+		logger.ErrorContext(ctx, "Failed to dump request.", slog.Any("error", err))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 
@@ -45,7 +42,7 @@ func echoHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
-	_, span := handlerTracer.Start(r.Context(), "healthHandler")
+	_, span := tracer.Start(r.Context(), "healthHandler")
 	defer span.End()
 
 	render.Status(r, http.StatusOK)
@@ -53,14 +50,14 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func panicHandler(w http.ResponseWriter, r *http.Request) {
-	_, span := handlerTracer.Start(r.Context(), "panicHandler")
+	_, span := tracer.Start(r.Context(), "panicHandler")
 	defer span.End()
 
 	panic("panic test")
 }
 
 func statusHandler(w http.ResponseWriter, r *http.Request) {
-	ctx, span := handlerTracer.Start(r.Context(), "statusHandler")
+	ctx, span := tracer.Start(r.Context(), "statusHandler")
 	defer span.End()
 	span.SetAttributes(attribute.Key("http.parameter.status").String(r.URL.Query().Get("status")))
 
@@ -70,7 +67,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 	if statusString == "" || statusString == "random" {
 		index, err := rand.Int(rand.Reader, big.NewInt(int64(len(randomStatusCodes))))
 		if err != nil {
-			slog.ErrorContext(ctx, "Failed to generate random index.", slog.Any("error", err))
+			logger.ErrorContext(ctx, "Failed to generate random index.", slog.Any("error", err))
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 
@@ -87,7 +84,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 
 	status, err := strconv.Atoi(statusString)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to parse 'status' parameter.", slog.Any("error", err))
+		logger.ErrorContext(ctx, "Failed to parse 'status' parameter.", slog.Any("error", err))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 
@@ -100,7 +97,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func timeoutHandler(w http.ResponseWriter, r *http.Request) {
-	ctx, span := handlerTracer.Start(r.Context(), "timeoutHandler")
+	ctx, span := tracer.Start(r.Context(), "timeoutHandler")
 	defer span.End()
 	span.SetAttributes(attribute.Key("http.parameter.timeout").String(r.URL.Query().Get("timeout")))
 
@@ -108,7 +105,7 @@ func timeoutHandler(w http.ResponseWriter, r *http.Request) {
 	if timeoutString == "" {
 		err := fmt.Errorf("timeout parameter is missing")
 
-		slog.ErrorContext(ctx, "Parameter 'timeout' is missing.", slog.Any("error", err))
+		logger.ErrorContext(ctx, "Parameter 'timeout' is missing.", slog.Any("error", err))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 
@@ -118,7 +115,7 @@ func timeoutHandler(w http.ResponseWriter, r *http.Request) {
 
 	timeout, err := time.ParseDuration(timeoutString)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to parse 'timeout' parameter.", slog.Any("error", err))
+		logger.ErrorContext(ctx, "Failed to parse 'timeout' parameter.", slog.Any("error", err))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 
@@ -139,7 +136,7 @@ func timeoutHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func headerSizeHandler(w http.ResponseWriter, r *http.Request) {
-	ctx, span := handlerTracer.Start(r.Context(), "headerSizeHandler")
+	ctx, span := tracer.Start(r.Context(), "headerSizeHandler")
 	defer span.End()
 	span.SetAttributes(attribute.Key("http.parameter.size").String(r.URL.Query().Get("size")))
 
@@ -147,7 +144,7 @@ func headerSizeHandler(w http.ResponseWriter, r *http.Request) {
 	if headerSizeString == "" {
 		err := fmt.Errorf("size parameter is missing")
 
-		slog.ErrorContext(ctx, "Parameter 'size' is missing.", slog.Any("error", err))
+		logger.ErrorContext(ctx, "Parameter 'size' is missing.", slog.Any("error", err))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 
@@ -157,7 +154,7 @@ func headerSizeHandler(w http.ResponseWriter, r *http.Request) {
 
 	size, err := strconv.Atoi(headerSizeString)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to parse 'size' parameter.", slog.Any("error", err))
+		logger.ErrorContext(ctx, "Failed to parse 'size' parameter.", slog.Any("error", err))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 
@@ -187,12 +184,12 @@ type Request struct {
 }
 
 func requestHandler(w http.ResponseWriter, r *http.Request) {
-	ctx, span := handlerTracer.Start(r.Context(), "requestHandler")
+	ctx, span := tracer.Start(r.Context(), "requestHandler")
 	defer span.End()
 
 	var request Request
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		slog.ErrorContext(ctx, "Failed to decode request body.", slog.Any("error", err))
+		logger.ErrorContext(ctx, "Failed to decode request body.", slog.Any("error", err))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 
@@ -202,7 +199,7 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 
 	req, err := http.NewRequestWithContext(ctx, request.Method, request.URL, strings.NewReader(request.Body))
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to create http request.", slog.Any("error", err))
+		logger.ErrorContext(ctx, "Failed to create http request.", slog.Any("error", err))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 
@@ -216,7 +213,7 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to do http request.", slog.Any("error", err))
+		logger.ErrorContext(ctx, "Failed to do http request.", slog.Any("error", err))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 
@@ -228,7 +225,7 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to read reespons body.", slog.Any("error", err))
+		logger.ErrorContext(ctx, "Failed to read reespons body.", slog.Any("error", err))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 
@@ -254,7 +251,7 @@ func fibonacci(n uint64) (*big.Int, *big.Int) {
 }
 
 func fibonacciHandler(w http.ResponseWriter, r *http.Request) {
-	ctx, span := handlerTracer.Start(r.Context(), "fibonacciHandler")
+	ctx, span := tracer.Start(r.Context(), "fibonacciHandler")
 	defer span.End()
 	span.SetAttributes(attribute.Key("http.parameter.n").String(r.URL.Query().Get("n")))
 
@@ -262,7 +259,7 @@ func fibonacciHandler(w http.ResponseWriter, r *http.Request) {
 	if nString == "" {
 		err := fmt.Errorf("n parameter is missing")
 
-		slog.ErrorContext(ctx, "Parameter 'n' is missing.", slog.Any("error", err))
+		logger.ErrorContext(ctx, "Parameter 'n' is missing.", slog.Any("error", err))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 
@@ -272,7 +269,7 @@ func fibonacciHandler(w http.ResponseWriter, r *http.Request) {
 
 	n, err := strconv.ParseUint(nString, 10, 64)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to parse 'n' parameter.", slog.Any("error", err))
+		logger.ErrorContext(ctx, "Failed to parse 'n' parameter.", slog.Any("error", err))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 
@@ -291,12 +288,12 @@ func fibonacciHandler(w http.ResponseWriter, r *http.Request) {
 var upgrader = websocket.Upgrader{}
 
 func websocketHandler(w http.ResponseWriter, r *http.Request) {
-	ctx, span := handlerTracer.Start(r.Context(), "websocketHandler")
+	ctx, span := tracer.Start(r.Context(), "websocketHandler")
 	defer span.End()
 
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to upgrade connection.", slog.Any("error", err))
+		logger.ErrorContext(ctx, "Failed to upgrade connection.", slog.Any("error", err))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return
@@ -309,7 +306,7 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 	c.SetReadDeadline(time.Now().Add(30 * time.Second))
 
 	c.SetPongHandler(func(string) error {
-		slog.DebugContext(ctx, "Received pong from client.")
+		logger.DebugContext(ctx, "Received pong from client.")
 		span.AddEvent("Received pong from client.")
 		c.SetReadDeadline(time.Now().Add(30 * time.Second))
 		return nil
@@ -319,11 +316,11 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 		for {
 			<-ticker.C
 
-			slog.DebugContext(ctx, "Sent ping to client.")
+			logger.DebugContext(ctx, "Sent ping to client.")
 			span.AddEvent("Sent ping to client.")
 
 			if err := c.WriteMessage(websocket.PingMessage, nil); err != nil {
-				slog.ErrorContext(ctx, "Failed to send ping.", slog.Any("error", err))
+				logger.ErrorContext(ctx, "Failed to send ping.", slog.Any("error", err))
 				span.RecordError(err)
 				span.SetStatus(codes.Error, err.Error())
 				return
@@ -335,19 +332,19 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 		mt, message, err := c.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure) {
-				slog.ErrorContext(ctx, "Failed to read message.", slog.Any("error", err))
+				logger.ErrorContext(ctx, "Failed to read message.", slog.Any("error", err))
 				span.RecordError(err)
 				span.SetStatus(codes.Error, err.Error())
 			}
 			break
 		}
 
-		slog.DebugContext(ctx, "Received message.", slog.String("message", string(message)))
+		logger.DebugContext(ctx, "Received message.", slog.String("message", string(message)))
 		span.AddEvent(fmt.Sprintf("Received message: %s", string(message)))
 
 		err = c.WriteMessage(mt, message)
 		if err != nil {
-			slog.ErrorContext(ctx, "Failed to write message.", slog.Any("error", err))
+			logger.ErrorContext(ctx, "Failed to write message.", slog.Any("error", err))
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			break

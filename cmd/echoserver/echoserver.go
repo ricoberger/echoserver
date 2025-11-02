@@ -12,8 +12,6 @@ import (
 	"time"
 
 	"github.com/ricoberger/echoserver/pkg/instrument"
-	"github.com/ricoberger/echoserver/pkg/instrument/logger"
-	"github.com/ricoberger/echoserver/pkg/instrument/tracer"
 	"github.com/ricoberger/echoserver/pkg/version"
 
 	"github.com/alecthomas/kong"
@@ -21,13 +19,18 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/bridges/otelslog"
+	"go.opentelemetry.io/otel"
+)
+
+var (
+	tracer = otel.Tracer("main")
+	logger = otelslog.NewLogger("main")
 )
 
 type Cli struct {
-	Address string `env:"ADDRESS" default:":8080" help:"The address where the server should listen on."`
-
-	Log    logger.Config `embed:"" prefix:"log." envprefix:"LOG_"`
-	Tracer tracer.Config `embed:"" prefix:"tracer." envprefix:"TRACER_"`
+	ServiceName string `env:"SERVICE_NAME" default:"echoserver" help:"The service name which should be used for the echoserver."`
+	Address     string `env:"ADDRESS" default:":8080" help:"The address where the server should listen on."`
 }
 
 func main() {
@@ -39,15 +42,14 @@ func main() {
 }
 
 func (c *Cli) run() error {
-	logger := logger.New(c.Log)
-	logger.Info("Version information.", "version", slog.GroupValue(version.Info()...))
-	logger.Info("Build information.", "build", slog.GroupValue(version.BuildContext()...))
-
-	tracer, err := tracer.New(c.Tracer)
+	instrumentClient, err := instrument.New(c.ServiceName)
 	if err != nil {
 		return err
 	}
-	defer tracer.Shutdown()
+	defer instrumentClient.Shutdown()
+
+	version.Info()
+	version.BuildContext()
 
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
@@ -83,9 +85,9 @@ func (c *Cli) run() error {
 
 	go func() {
 		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-			slog.Error("Server died unexpected.", slog.Any("error", err))
+			logger.Error("Server died unexpected.", slog.Any("error", err))
 		}
-		slog.Error("Server stopped.")
+		logger.Error("Server stopped.")
 	}()
 
 	// All components should be terminated gracefully. For that we are listen
