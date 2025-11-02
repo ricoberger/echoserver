@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/ricoberger/echoserver/pkg/instrument"
+
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -66,7 +68,19 @@ func (h *CustomHandler) Handle(ctx context.Context, r slog.Record) error {
 	}
 
 	if span := trace.SpanFromContext(ctx); span.SpanContext().HasTraceID() {
-		r.Add("traceID", slog.StringValue(span.SpanContext().TraceID().String()))
+		r.Add("trace_id", slog.StringValue(span.SpanContext().TraceID().String()))
+	} else if requestInfo, ok := ctx.Value(instrument.RequestInfoKey).(*instrument.RequestInfo); ok {
+		if requestInfo.TraceId != "" {
+			r.Add("trace_id", slog.StringValue(requestInfo.TraceId))
+		}
+	}
+
+	if span := trace.SpanFromContext(ctx); span.SpanContext().HasSpanID() {
+		r.Add("span_id", slog.StringValue(span.SpanContext().SpanID().String()))
+	} else if requestInfo, ok := ctx.Value(instrument.RequestInfoKey).(*instrument.RequestInfo); ok {
+		if requestInfo.SpanId != "" {
+			r.Add("span_id", slog.StringValue(requestInfo.SpanId))
+		}
 	}
 
 	if attrs, ok := ctx.Value(slogFields).([]slog.Attr); ok {
