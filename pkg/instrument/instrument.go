@@ -28,6 +28,8 @@ const RequestInfoKey ctxKeyRequestInfo = 0
 
 type RequestInfo struct {
 	Metrics *httpsnoop.Metrics
+	TraceId string
+	SpanId  string
 }
 
 var (
@@ -77,6 +79,11 @@ func handleTraces(requestInfo *RequestInfo) func(next http.Handler) http.Handler
 			ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
 			ctx, span := otel.Tracer("http.request").Start(ctx, "http.request", oteltrace.WithSpanKind(oteltrace.SpanKindServer))
 			defer span.End()
+
+			if span.SpanContext().HasTraceID() && span.SpanContext().HasSpanID() {
+				requestInfo.TraceId = span.SpanContext().TraceID().String()
+				requestInfo.SpanId = span.SpanContext().SpanID().String()
+			}
 
 			scheme := "http"
 			if r.TLS != nil {
