@@ -55,13 +55,19 @@ helm upgrade --install echoserver oci://ghcr.io/ricoberger/charts/echoserver --v
 Usage: echoserver [flags]
 
 Flags:
-  -h, --help                               Show context-sensitive help.
-      --address=":8080"                    The address where the server should listen on ($ADDRESS).
-      --log.format="console"               Set the output format of the logs. Must be "console" or "json" ($LOG_FORMAT).
-      --log.level=INFO                     Set the log level. Must be "DEBUG", "INFO", "WARN" or "ERROR" ($LOG_LEVEL).
-      --tracer.enabled                     Enable tracing ($TRACER_ENABLED).
-      --tracer.service="echoserver"        The name of the service which should be used for tracing ($TRACER_SERVICE).
-      --tracer.address="localhost:4317"    The address of the tracing provider instance ($TRACER_ADDRESS).
+  -h, --help                         Show context-sensitive help.
+      --service-name="echoserver"    The service name which should be used for the echoserver ($SERVICE_NAME).
+      --address=":8080"              The address where the server should listen on ($ADDRESS).
+```
+
+```sh
+export OTEL_EXPORTER_OTLP_ENDPOINT="localhost:4317"
+# Valid values are "console", "otlp", "none"
+export OTEL_LOGS_EXPORTER="console"
+# Valid values are "console", "otlp", "prometheus", "none"
+export OTEL_METRICS_EXPORTER="console"
+# Valid values are "console", "otlp", "none"
+export OTEL_TRACES_EXPORTER="console"
 ```
 
 ## Examples

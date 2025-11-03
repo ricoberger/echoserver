@@ -12,11 +12,11 @@ import (
 	"github.com/felixge/httpsnoop"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
+	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
 	oteltrace "go.opentelemetry.io/otel/trace"
@@ -27,32 +27,37 @@ type ctxKeyRequestInfo int
 const RequestInfoKey ctxKeyRequestInfo = 0
 
 type RequestInfo struct {
-	Metrics *httpsnoop.Metrics
-	TraceId string
-	SpanId  string
+	Metrics    *httpsnoop.Metrics
+	TraceId    oteltrace.TraceID
+	SpanId     oteltrace.SpanID
+	TraceFlags oteltrace.TraceFlags
+	TraceState oteltrace.TraceState
 }
 
 var (
-	reqCount = promauto.NewCounterVec(prometheus.CounterOpts{
-		Namespace: "echoserver",
-		Name:      "http_requests_total",
-		Help:      "Number of HTTP requests processed, partitioned by status code, method and path.",
-	}, []string{"response_code", "request_method", "request_path"})
+	tracer = otel.Tracer("instrument")
+	logger = otelslog.NewLogger("instrument")
+	meter  = otel.Meter("instrument")
 
-	reqDurationSum = promauto.NewSummaryVec(prometheus.SummaryOpts{
-		Namespace:  "echoserver",
-		Name:       "http_request_duration_seconds",
-		Help:       "Latency of HTTP requests processed, partitioned by status code, method and path.",
-		Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.95: 0.005, 0.99: 0.001},
-	}, []string{"response_code", "request_method", "request_path"})
-
-	respSizeSum = promauto.NewSummaryVec(prometheus.SummaryOpts{
-		Namespace:  "echoserver",
-		Name:       "http_response_size_bytes",
-		Help:       "Size of HTTP responses, partitioned by status code, method and path.",
-		Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.95: 0.005, 0.99: 0.001},
-	}, []string{"response_code", "request_method", "request_path"})
+	reqCount    metric.Int64Counter
+	reqDuration metric.Float64Histogram
+	respSize    metric.Int64Histogram
 )
+
+func init() {
+	reqCount, _ = meter.Int64Counter(
+		"http_requests_total",
+		metric.WithDescription("Number of HTTP requests processed, partitioned by status code, method and path."),
+	)
+	reqDuration, _ = meter.Float64Histogram(
+		"http_request_duration_seconds",
+		metric.WithDescription("Latency of HTTP requests processed, partitioned by status code, method and path."),
+	)
+	respSize, _ = meter.Int64Histogram(
+		"http_response_size_bytes",
+		metric.WithDescription("Size of HTTP responses, partitioned by status code, method and path."),
+	)
+}
 
 func Handler() func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -77,13 +82,13 @@ func handleTraces(requestInfo *RequestInfo) func(next http.Handler) http.Handler
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
-			ctx, span := otel.Tracer("http.request").Start(ctx, "http.request", oteltrace.WithSpanKind(oteltrace.SpanKindServer))
+			ctx, span := tracer.Start(ctx, "http.request", oteltrace.WithSpanKind(oteltrace.SpanKindServer))
 			defer span.End()
 
-			if span.SpanContext().HasTraceID() && span.SpanContext().HasSpanID() {
-				requestInfo.TraceId = span.SpanContext().TraceID().String()
-				requestInfo.SpanId = span.SpanContext().SpanID().String()
-			}
+			requestInfo.TraceId = span.SpanContext().TraceID()
+			requestInfo.SpanId = span.SpanContext().SpanID()
+			requestInfo.TraceFlags = span.SpanContext().TraceFlags()
+			requestInfo.TraceState = span.SpanContext().TraceState()
 
 			scheme := "http"
 			if r.TLS != nil {
@@ -120,7 +125,7 @@ func handleTraces(requestInfo *RequestInfo) func(next http.Handler) http.Handler
 					))
 					span.End()
 
-					slog.ErrorContext(ctx, "Recover panic.", slog.String("error", fmt.Sprintf("%v", err)), slog.String("stack", string(debug.Stack())))
+					logger.ErrorContext(ctx, "Recover panic.", slog.String("error", fmt.Sprintf("%v", err)), slog.String("stack", string(debug.Stack())))
 					http.Error(w, fmt.Sprintf("%#v", err), http.StatusInternalServerError)
 				}
 			}()
@@ -134,8 +139,7 @@ func handleTraces(requestInfo *RequestInfo) func(next http.Handler) http.Handler
 
 				span.SetAttributes(semconv.HTTPResponseSize(int(written)))
 				span.SetAttributes(semconv.HTTPResponseStatusCode(status))
-				//nolint:gosec
-				span.SetStatus(codes.Code(status), http.StatusText(status))
+				span.SetStatus(codes.Ok, http.StatusText(status))
 			}
 		})
 	}
@@ -143,14 +147,34 @@ func handleTraces(requestInfo *RequestInfo) func(next http.Handler) http.Handler
 
 func handleMetricsAndLogs(r *http.Request, requestInfo *RequestInfo) {
 	if requestInfo.Metrics != nil {
-		path := chi.RouteContext(r.Context()).RoutePattern()
+		ctx := oteltrace.ContextWithSpanContext(r.Context(), oteltrace.NewSpanContext(oteltrace.SpanContextConfig{
+			TraceID:    requestInfo.TraceId,
+			SpanID:     requestInfo.SpanId,
+			TraceFlags: requestInfo.TraceFlags,
+			TraceState: requestInfo.TraceState,
+			Remote:     false,
+		}))
+
+		path := chi.RouteContext(ctx).RoutePattern()
 		status := requestInfo.Metrics.Code
 		duration := requestInfo.Metrics.Duration
 		written := requestInfo.Metrics.Written
 
-		reqCount.WithLabelValues(strconv.Itoa(status), r.Method, path).Inc()
-		reqDurationSum.WithLabelValues(strconv.Itoa(status), r.Method, path).Observe(duration.Seconds())
-		respSizeSum.WithLabelValues(strconv.Itoa(status), r.Method, path).Observe(float64(written))
+		reqCount.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("response_code", strconv.Itoa(status)),
+			attribute.String("request_method", r.Method),
+			attribute.String("request_path", path),
+		))
+		reqDuration.Record(ctx, duration.Seconds(), metric.WithAttributes(
+			attribute.String("response_code", strconv.Itoa(status)),
+			attribute.String("request_method", r.Method),
+			attribute.String("request_path", path),
+		))
+		respSize.Record(ctx, written, metric.WithAttributes(
+			attribute.String("response_code", strconv.Itoa(status)),
+			attribute.String("request_method", r.Method),
+			attribute.String("request_path", path),
+		))
 
 		scheme := "http"
 		if r.TLS != nil {
@@ -158,32 +182,32 @@ func handleMetricsAndLogs(r *http.Request, requestInfo *RequestInfo) {
 		}
 
 		if status >= 500 {
-			slog.ErrorContext(
-				r.Context(),
+			logger.ErrorContext(
+				ctx,
 				"Request completed.",
-				slog.String("requestScheme", scheme),
-				slog.String("requestProto", r.Proto),
-				slog.String("requestMethod", r.Method),
-				slog.String("requestAddr", r.RemoteAddr),
-				slog.String("requestUserAgent", strings.ReplaceAll(strings.ReplaceAll(r.UserAgent(), "\n", ""), "\r", "")),
-				slog.String("requestURI", fmt.Sprintf("%s://%s%s", scheme, r.Host, r.RequestURI)),
-				slog.Duration("requestDuration", duration),
-				slog.Int("responseStatus", status),
-				slog.Int64("responseSize", written),
+				slog.String("http_scheme", scheme),
+				slog.String("http_proto", r.Proto),
+				slog.String("http_method", r.Method),
+				slog.String("http_remote_address", r.RemoteAddr),
+				slog.String("http_user_agent", strings.ReplaceAll(strings.ReplaceAll(r.UserAgent(), "\n", ""), "\r", "")),
+				slog.String("http_url", fmt.Sprintf("%s://%s%s", scheme, r.Host, r.RequestURI)),
+				slog.Duration("http_request_duration", duration),
+				slog.Int("http_response_status_code", status),
+				slog.Int64("http_response_size", written),
 			)
 		} else {
-			slog.InfoContext(
-				r.Context(),
+			logger.InfoContext(
+				ctx,
 				"Request completed.",
-				slog.String("requestScheme", scheme),
-				slog.String("requestProto", r.Proto),
-				slog.String("requestMethod", r.Method),
-				slog.String("requestAddr", r.RemoteAddr),
-				slog.String("requestUserAgent", strings.ReplaceAll(strings.ReplaceAll(r.UserAgent(), "\n", ""), "\r", "")),
-				slog.String("requestURI", fmt.Sprintf("%s://%s%s", scheme, r.Host, r.RequestURI)),
-				slog.Duration("requestDuration", duration),
-				slog.Int("responseStatus", status),
-				slog.Int64("responseSize", written),
+				slog.String("http_scheme", scheme),
+				slog.String("http_proto", r.Proto),
+				slog.String("http_method", r.Method),
+				slog.String("http_remote_address", r.RemoteAddr),
+				slog.String("http_user_agent", strings.ReplaceAll(strings.ReplaceAll(r.UserAgent(), "\n", ""), "\r", "")),
+				slog.String("http_url", fmt.Sprintf("%s://%s%s", scheme, r.Host, r.RequestURI)),
+				slog.Duration("http_request_duration", duration),
+				slog.Int("http_response_status_code", status),
+				slog.Int64("http_response_size", written),
 			)
 		}
 	}

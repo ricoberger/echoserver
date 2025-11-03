@@ -97,14 +97,14 @@ volumeMounts: []
 ## Specify additional environment variables for the echoserver container.
 ##
 env: []
-# - name: AZURE_SUBSCRIPTION_ID
-#   value: MY_ENV_VALUE
-# - name: AZURE_TENANT_ID
-#   value: MY_ENV_VALUE
-# - name: AZURE_CLIENT_ID
-#   value: MY_ENV_VALUE
-# - name: AZURE_CLIENT_SECRET
-#   value: MY_ENV_VALUE
+# - name: OTEL_EXPORTER_OTLP_ENDPOINT
+#   value: http://localhost:4317
+# - name: OTEL_LOGS_EXPORTER
+#   value: console
+# - name: OTEL_METRICS_EXPORTER
+#   value: console
+# - name: OTEL_TRACES_EXPORTER
+#   value: console
 
 ## Specify additional labels and annotations for the created Pods.
 ##
