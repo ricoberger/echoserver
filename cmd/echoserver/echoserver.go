@@ -63,7 +63,6 @@ func (c *Cli) run() error {
 	router.HandleFunc("/request", requestHandler)
 	router.HandleFunc("/fibonacci", fibonacciHandler)
 	router.HandleFunc("/websocket", websocketHandler)
-	router.Handle("/metrics", promhttp.Handler())
 	router.HandleFunc("/debug/pprof", pprof.Index)
 	router.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
 	router.HandleFunc("/debug/pprof/profile", pprof.Profile)
@@ -76,6 +75,10 @@ func (c *Cli) run() error {
 	router.Handle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
 	router.Handle("/debug/pprof/trace", pprof.Handler("trace"))
 	router.Handle("/debug/pprof/fgprof", fgprof.Handler())
+
+	if os.Getenv("OTEL_METRICS_EXPORTER") == "prometheus" {
+		router.Handle("/metrics", promhttp.Handler())
+	}
 
 	server := &http.Server{
 		Addr:              c.Address,
