@@ -55,19 +55,32 @@ helm upgrade --install echoserver oci://ghcr.io/ricoberger/charts/echoserver --v
 Usage: echoserver [flags]
 
 Flags:
-  -h, --help                         Show context-sensitive help.
-      --service-name="echoserver"    The service name which should be used for the echoserver ($SERVICE_NAME).
-      --address=":8080"              The address where the server should listen on ($ADDRESS).
+  -h, --help               Show context-sensitive help.
+      --address=":8080"    The address where the server should listen on ($ADDRESS).
 ```
 
 ```sh
+# Configure an OTLP/gRPC or OTLP/HTTP endpoint for traces, metrics, and logs.
+# To configure different endpoints for traces, metrics, and logs, use the
+# OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
+# and OTEL_EXPORTER_OTLP_LOGS_ENDPOINT environment variables.
 export OTEL_EXPORTER_OTLP_ENDPOINT="localhost:4317"
-# Valid values are "console", "otlp", "none"
+# Set the logs exporter which should be used. Valid values are "console",
+# "otlp" and "none". The default value is "none".
 export OTEL_LOGS_EXPORTER="console"
-# Valid values are "console", "otlp", "prometheus", "none"
+# Set the metrics exporter which should be used. Valid values are "console",
+# "otlp", "prometheus" and "none". The default value is "none".
 export OTEL_METRICS_EXPORTER="console"
-# Valid values are "console", "otlp", "none"
+# Set the traces exporter which should be used. Valid values are "console",
+# "otlp" and "none". The default value is "none".
 export OTEL_TRACES_EXPORTER="console"
+# Key-value pairs to be used as resource attributes. This can be used to
+# overwrite the default service name / version and to set additional attributes,
+# like the Kubernetes Pod name, etc.
+export OTEL_RESOURCE_ATTRIBUTES=service.name=my-service,service.version=1.0.0
+# Enable resource detectors. Valid values are "container", "host", "os",
+# "process", and "sdk".
+export OTEL_RESOURCE_DETECTORS="container,host,os,process,sdk"
 ```
 
 ## Examples
