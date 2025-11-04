@@ -41,7 +41,7 @@ func main() {
 }
 
 func (c *Cli) run() error {
-	instrumentClient, err := instrument.New()
+	instrumentClient, err := instrument.New(context.Background())
 	if err != nil {
 		return err
 	}
