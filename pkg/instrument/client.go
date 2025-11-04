@@ -55,31 +55,31 @@ func (c *client) Shutdown() {
 	}
 }
 
-func New() (Client, error) {
+func New(ctx context.Context) (Client, error) {
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},
 		propagation.Baggage{},
 		b3.New(b3.WithInjectEncoding(b3.B3MultipleHeader|b3.B3SingleHeader)),
 	))
 
-	defaultResource, err := newReource()
+	defaultResource, err := newReource(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	loggerProvider, err := newLoggerProvider(defaultResource)
+	loggerProvider, err := newLoggerProvider(ctx, defaultResource)
 	if err != nil {
 		return nil, err
 	}
 	global.SetLoggerProvider(loggerProvider)
 
-	meterProvider, err := newMeterProvider(defaultResource)
+	meterProvider, err := newMeterProvider(ctx, defaultResource)
 	if err != nil {
 		return nil, err
 	}
 	otel.SetMeterProvider(meterProvider)
 
-	tracerProvider, err := newTracerProvider(defaultResource)
+	tracerProvider, err := newTracerProvider(ctx, defaultResource)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +92,7 @@ func New() (Client, error) {
 	}, nil
 }
 
-func newReource() (*resource.Resource, error) {
+func newReource(ctx context.Context) (*resource.Resource, error) {
 	options := []resource.Option{
 		resource.WithAttributes(attribute.Key("service.name").String("echoserver")),
 		resource.WithAttributes(attribute.Key("service.version").String(version.Version)),
@@ -114,10 +114,10 @@ func newReource() (*resource.Resource, error) {
 		}
 	}
 
-	return resource.New(context.Background(), options...)
+	return resource.New(ctx, options...)
 }
 
-func newLoggerProvider(defaultResource *resource.Resource) (*log.LoggerProvider, error) {
+func newLoggerProvider(ctx context.Context, defaultResource *resource.Resource) (*log.LoggerProvider, error) {
 	switch os.Getenv("OTEL_LOGS_EXPORTER") {
 	case "console":
 		exp, err := stdoutlog.New()
@@ -130,7 +130,7 @@ func newLoggerProvider(defaultResource *resource.Resource) (*log.LoggerProvider,
 			log.WithResource(defaultResource),
 		), nil
 	case "otlp":
-		exp, err := otlploggrpc.New(context.Background())
+		exp, err := otlploggrpc.New(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -146,7 +146,7 @@ func newLoggerProvider(defaultResource *resource.Resource) (*log.LoggerProvider,
 	}
 }
 
-func newMeterProvider(defaultResource *resource.Resource) (*metric.MeterProvider, error) {
+func newMeterProvider(ctx context.Context, defaultResource *resource.Resource) (*metric.MeterProvider, error) {
 	switch os.Getenv("OTEL_METRICS_EXPORTER") {
 	case "console":
 		exp, err := stdoutmetric.New()
@@ -164,7 +164,7 @@ func newMeterProvider(defaultResource *resource.Resource) (*metric.MeterProvider
 			metric.WithResource(defaultResource),
 		), nil
 	case "otlp":
-		exp, err := otlpmetricgrpc.New(context.Background())
+		exp, err := otlpmetricgrpc.New(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -198,7 +198,7 @@ func newMeterProvider(defaultResource *resource.Resource) (*metric.MeterProvider
 	}
 }
 
-func newTracerProvider(defaultResource *resource.Resource) (*trace.TracerProvider, error) {
+func newTracerProvider(ctx context.Context, defaultResource *resource.Resource) (*trace.TracerProvider, error) {
 	switch os.Getenv("OTEL_TRACES_EXPORTER") {
 	case "console":
 		exp, err := stdouttrace.New()
@@ -211,10 +211,7 @@ func newTracerProvider(defaultResource *resource.Resource) (*trace.TracerProvide
 			trace.WithResource(defaultResource),
 		), nil
 	case "otlp":
-		exp, err := otlptracegrpc.New(
-			context.Background(),
-			otlptracegrpc.WithInsecure(),
-		)
+		exp, err := otlptracegrpc.New(ctx, otlptracegrpc.WithInsecure())
 		if err != nil {
 			return nil, err
 		}
