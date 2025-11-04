@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ricoberger/echoserver/pkg/version"
+
 	"github.com/felixge/httpsnoop"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -36,7 +38,7 @@ type RequestInfo struct {
 
 var (
 	tracer = otel.Tracer("instrument")
-	logger = otelslog.NewLogger("instrument")
+	logger = otelslog.NewLogger("instrument", otelslog.WithSource(true), otelslog.WithVersion(version.Version))
 	meter  = otel.Meter("instrument")
 
 	reqCount    metric.Int64Counter

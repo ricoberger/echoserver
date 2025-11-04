@@ -25,7 +25,7 @@ import (
 
 var (
 	tracer = otel.Tracer("main")
-	logger = otelslog.NewLogger("main")
+	logger = otelslog.NewLogger("main", otelslog.WithSource(true), otelslog.WithVersion(version.Version))
 )
 
 type Cli struct {

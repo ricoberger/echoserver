@@ -12,7 +12,7 @@ import (
 
 // Build information. Populated at build-time.
 var (
-	logger = otelslog.NewLogger("version")
+	logger = otelslog.NewLogger("version", otelslog.WithSource(true), otelslog.WithVersion(Version))
 
 	Version   string
 	Revision  string
