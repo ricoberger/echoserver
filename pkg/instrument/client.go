@@ -2,9 +2,9 @@ package instrument
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/ricoberger/echoserver/pkg/version"
@@ -55,34 +55,14 @@ func (c *client) Shutdown() {
 	}
 }
 
-func New(serviceName string) (Client, error) {
-	if serviceName == "" {
-		return nil, fmt.Errorf("service name must not be empty")
-	}
-
+func New() (Client, error) {
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},
 		propagation.Baggage{},
 		b3.New(b3.WithInjectEncoding(b3.B3MultipleHeader|b3.B3SingleHeader)),
 	))
 
-	defaultResource, err := resource.New(
-		context.Background(),
-		resource.WithAttributes(attribute.Key("service.name").String(serviceName)),
-		resource.WithAttributes(attribute.Key("service.version").String(version.Version)),
-		// resource.WithContainer(),
-		// resource.WithContainerID(),
-		// resource.WithHost(),
-		// resource.WithOS(),
-		// resource.WithProcessExecutableName(),
-		// resource.WithProcessExecutablePath(),
-		// resource.WithProcessOwner(),
-		// resource.WithProcessPID(),
-		// resource.WithProcessRuntimeDescription(),
-		// resource.WithProcessRuntimeName(),
-		// resource.WithProcessRuntimeVersion(),
-		// resource.WithTelemetrySDK(),
-	)
+	defaultResource, err := newReource()
 	if err != nil {
 		return nil, err
 	}
@@ -110,6 +90,31 @@ func New(serviceName string) (Client, error) {
 		meterProvider:  meterProvider,
 		tracerProvider: tracerProvider,
 	}, nil
+}
+
+func newReource() (*resource.Resource, error) {
+	options := []resource.Option{
+		resource.WithAttributes(attribute.Key("service.name").String("echoserver")),
+		resource.WithAttributes(attribute.Key("service.version").String(version.Version)),
+		resource.WithFromEnv(),
+	}
+
+	for detector := range strings.SplitSeq(os.Getenv("OTEL_RESOURCE_DETECTORS"), ",") {
+		switch detector {
+		case "container":
+			options = append(options, resource.WithContainer())
+		case "host":
+			options = append(options, resource.WithHost())
+		case "os":
+			options = append(options, resource.WithOS())
+		case "process":
+			options = append(options, resource.WithProcess())
+		case "sdk":
+			options = append(options, resource.WithTelemetrySDK())
+		}
+	}
+
+	return resource.New(context.Background(), options...)
 }
 
 func newLoggerProvider(defaultResource *resource.Resource) (*log.LoggerProvider, error) {

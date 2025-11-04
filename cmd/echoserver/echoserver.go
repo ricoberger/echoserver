@@ -29,8 +29,7 @@ var (
 )
 
 type Cli struct {
-	ServiceName string `env:"SERVICE_NAME" default:"echoserver" help:"The service name which should be used for the echoserver."`
-	Address     string `env:"ADDRESS" default:":8080" help:"The address where the server should listen on."`
+	Address string `env:"ADDRESS" default:":8080" help:"The address where the server should listen on."`
 }
 
 func main() {
@@ -42,7 +41,7 @@ func main() {
 }
 
 func (c *Cli) run() error {
-	instrumentClient, err := instrument.New(c.ServiceName)
+	instrumentClient, err := instrument.New()
 	if err != nil {
 		return err
 	}
