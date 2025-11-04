@@ -206,7 +206,10 @@ func newTracerProvider(defaultResource *resource.Resource) (*trace.TracerProvide
 			trace.WithResource(defaultResource),
 		), nil
 	case "otlp":
-		exp, err := otlptracegrpc.New(context.Background())
+		exp, err := otlptracegrpc.New(
+			context.Background(),
+			otlptracegrpc.WithInsecure(),
+		)
 		if err != nil {
 			return nil, err
 		}
