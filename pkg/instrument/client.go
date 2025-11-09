@@ -130,7 +130,7 @@ func newLoggerProvider(ctx context.Context, defaultResource *resource.Resource) 
 			log.WithResource(defaultResource),
 		), nil
 	case "otlp":
-		exp, err := otlploggrpc.New(ctx)
+		exp, err := otlploggrpc.New(ctx, otlploggrpc.WithInsecure())
 		if err != nil {
 			return nil, err
 		}
@@ -164,7 +164,7 @@ func newMeterProvider(ctx context.Context, defaultResource *resource.Resource) (
 			metric.WithResource(defaultResource),
 		), nil
 	case "otlp":
-		exp, err := otlpmetricgrpc.New(ctx)
+		exp, err := otlpmetricgrpc.New(ctx, otlpmetricgrpc.WithInsecure())
 		if err != nil {
 			return nil, err
 		}
@@ -180,7 +180,6 @@ func newMeterProvider(ctx context.Context, defaultResource *resource.Resource) (
 		), nil
 	case "prometheus":
 		exp, err := promexp.New(
-			promexp.WithNamespace("echoserver"),
 			promexp.WithoutScopeInfo(),
 		)
 		if err != nil {
