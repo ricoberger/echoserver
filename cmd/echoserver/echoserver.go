@@ -18,6 +18,7 @@ import (
 	"github.com/felixge/fgprof"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel"
@@ -76,7 +77,12 @@ func (c *Cli) run() error {
 	router.Handle("/debug/pprof/fgprof", fgprof.Handler())
 
 	if os.Getenv("OTEL_METRICS_EXPORTER") == "prometheus" {
-		router.Handle("/metrics", promhttp.Handler())
+		// To view exemplars, the following cURL command can be used:
+		// curl -H 'Accept: application/openmetrics-text' 'http://localhost:8080/metrics'
+		router.Handle("/metrics", promhttp.InstrumentMetricHandler(
+			prometheus.DefaultRegisterer,
+			promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{EnableOpenMetrics: true}),
+		))
 	}
 
 	server := &http.Server{
@@ -89,7 +95,7 @@ func (c *Cli) run() error {
 		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("Server died unexpected.", slog.Any("error", err))
 		}
-		logger.Error("Server stopped.")
+		logger.Info("Server stopped.")
 	}()
 
 	// All components should be terminated gracefully. For that we are listen
@@ -99,7 +105,7 @@ func (c *Cli) run() error {
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
 
-	logger.Debug("Start listining for SIGINT and SIGTERM signal.")
+	logger.Info("Start listening for SIGINT and SIGTERM signal.")
 	<-done
 	logger.Info("Shutdown started.")
 
