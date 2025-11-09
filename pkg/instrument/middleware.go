@@ -48,16 +48,18 @@ var (
 
 func init() {
 	reqCount, _ = meter.Int64Counter(
-		"http_requests_total",
+		"http.server.request.total",
 		metric.WithDescription("Number of HTTP requests processed, partitioned by status code, method and path."),
 	)
 	reqDuration, _ = meter.Float64Histogram(
-		"http_request_duration_seconds",
+		"http.server.request.duration",
 		metric.WithDescription("Latency of HTTP requests processed, partitioned by status code, method and path."),
+		metric.WithExplicitBucketBoundaries(0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10),
 	)
 	respSize, _ = meter.Int64Histogram(
-		"http_response_size_bytes",
+		"http.server.response.body.size",
 		metric.WithDescription("Size of HTTP responses, partitioned by status code, method and path."),
+		metric.WithExplicitBucketBoundaries(1024, 32768, 1048576, 33554432, 134217728, 536870912, 1073741824),
 	)
 }
 
@@ -163,19 +165,19 @@ func handleMetricsAndLogs(r *http.Request, requestInfo *RequestInfo) {
 		written := requestInfo.Metrics.Written
 
 		reqCount.Add(ctx, 1, metric.WithAttributes(
-			attribute.String("response_code", strconv.Itoa(status)),
-			attribute.String("request_method", r.Method),
-			attribute.String("request_path", path),
+			attribute.String("http.response.status_code", strconv.Itoa(status)),
+			attribute.String("http.request.method", r.Method),
+			attribute.String("http.route", path),
 		))
 		reqDuration.Record(ctx, duration.Seconds(), metric.WithAttributes(
-			attribute.String("response_code", strconv.Itoa(status)),
-			attribute.String("request_method", r.Method),
-			attribute.String("request_path", path),
+			attribute.String("http.response.status_code", strconv.Itoa(status)),
+			attribute.String("http.request.method", r.Method),
+			attribute.String("http.route", path),
 		))
 		respSize.Record(ctx, written, metric.WithAttributes(
-			attribute.String("response_code", strconv.Itoa(status)),
-			attribute.String("request_method", r.Method),
-			attribute.String("request_path", path),
+			attribute.String("http.response.status_code", strconv.Itoa(status)),
+			attribute.String("http.request.method", r.Method),
+			attribute.String("http.route", path),
 		))
 
 		scheme := "http"
