@@ -81,6 +81,13 @@ export OTEL_RESOURCE_ATTRIBUTES=service.name=my-service,service.version=1.0.0
 # Enable resource detectors. Valid values are "container", "host", "os",
 # "process", and "sdk".
 export OTEL_RESOURCE_DETECTORS="container,host,os,process,sdk"
+
+# When "OTEL_LOGS_EXPORTER" is set to "console", the following environment
+# variables can be used to configure the logging output:
+# - LOG_FORMAT: Set the output format of the logs. Must be "console" or "json".
+# - LOG_LEVEL: Set the log level. Must be "DEBUG", "INFO", "WARN" or "ERROR".
+export LOG_FORMAT="console"
+export LOG_LEVEL="INFO"
 ```
 
 ## Examples

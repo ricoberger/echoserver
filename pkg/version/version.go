@@ -6,14 +6,10 @@ import (
 	"runtime"
 	"strings"
 	"text/template"
-
-	"go.opentelemetry.io/contrib/bridges/otelslog"
 )
 
 // Build information. Populated at build-time.
 var (
-	logger = otelslog.NewLogger("version", otelslog.WithSource(true), otelslog.WithVersion(Version))
-
 	Version   string
 	Revision  string
 	Branch    string
@@ -52,10 +48,10 @@ func Print(program string) (string, error) {
 
 // Info returns version, branch and revision information.
 func Info() {
-	logger.Info("Version information.", slog.String("version", Version), slog.String("branch", Branch), slog.String("revision", Revision))
+	slog.Info("Version information.", slog.String("version", Version), slog.String("branch", Branch), slog.String("revision", Revision))
 }
 
 // BuildContext returns goVersion, buildUser and buildDate information.
 func BuildContext() {
-	logger.Info("Build information.", slog.String("go", GoVersion), slog.String("user", BuildUser), slog.String("date", BuildDate))
+	slog.Info("Build information.", slog.String("go", GoVersion), slog.String("user", BuildUser), slog.String("date", BuildDate))
 }
