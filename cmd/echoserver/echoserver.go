@@ -20,13 +20,11 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel"
 )
 
 var (
 	tracer = otel.Tracer("main")
-	logger = otelslog.NewLogger("main", otelslog.WithSource(true), otelslog.WithVersion(version.Version))
 )
 
 type Cli struct {
@@ -93,9 +91,9 @@ func (c *Cli) run() error {
 
 	go func() {
 		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-			logger.Error("Server died unexpected.", slog.Any("error", err))
+			slog.Error("Server died unexpected.", slog.Any("error", err))
 		}
-		logger.Info("Server stopped.")
+		slog.Info("Server stopped.")
 	}()
 
 	// All components should be terminated gracefully. For that we are listen
@@ -105,19 +103,19 @@ func (c *Cli) run() error {
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
 
-	logger.Info("Start listening for SIGINT and SIGTERM signal.")
+	slog.Info("Start listening for SIGINT and SIGTERM signal.")
 	<-done
-	logger.Info("Shutdown started.")
+	slog.Info("Shutdown started.")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
-		logger.Error("HTTP server shutdown error", slog.Any("error", err))
+		slog.Error("HTTP server shutdown error", slog.Any("error", err))
 		return err
 	}
 
-	logger.Info("Shutdown done.")
+	slog.Info("Shutdown done.")
 
 	return nil
 }

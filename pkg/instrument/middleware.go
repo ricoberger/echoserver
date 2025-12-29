@@ -9,12 +9,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ricoberger/echoserver/pkg/version"
-
 	"github.com/felixge/httpsnoop"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -38,7 +35,6 @@ type RequestInfo struct {
 
 var (
 	tracer = otel.Tracer("instrument")
-	logger = otelslog.NewLogger("instrument", otelslog.WithSource(true), otelslog.WithVersion(version.Version))
 	meter  = otel.Meter("instrument")
 
 	reqCount    metric.Int64Counter
@@ -129,7 +125,7 @@ func handleTraces(requestInfo *RequestInfo) func(next http.Handler) http.Handler
 					))
 					span.End()
 
-					logger.ErrorContext(ctx, "Recover panic.", slog.String("error", fmt.Sprintf("%v", err)), slog.String("stack", string(debug.Stack())))
+					slog.ErrorContext(ctx, "Recover panic.", slog.String("error", fmt.Sprintf("%v", err)), slog.String("stack", string(debug.Stack())))
 					http.Error(w, fmt.Sprintf("%#v", err), http.StatusInternalServerError)
 				}
 			}()
@@ -186,7 +182,7 @@ func handleMetricsAndLogs(r *http.Request, requestInfo *RequestInfo) {
 		}
 
 		if status >= 500 {
-			logger.ErrorContext(
+			slog.ErrorContext(
 				ctx,
 				"Request completed.",
 				slog.String("http_scheme", scheme),
@@ -200,7 +196,7 @@ func handleMetricsAndLogs(r *http.Request, requestInfo *RequestInfo) {
 				slog.Int64("http_response_size", written),
 			)
 		} else {
-			logger.InfoContext(
+			slog.InfoContext(
 				ctx,
 				"Request completed.",
 				slog.String("http_scheme", scheme),

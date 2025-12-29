@@ -9,6 +9,7 @@ import (
 
 	"github.com/ricoberger/echoserver/pkg/version"
 
+	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/propagators/b3"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -16,7 +17,6 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	promexp "go.opentelemetry.io/otel/exporters/prometheus"
-	"go.opentelemetry.io/otel/exporters/stdout/stdoutlog"
 	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/log/global"
@@ -120,29 +120,41 @@ func newReource(ctx context.Context) (*resource.Resource, error) {
 func newLoggerProvider(ctx context.Context, defaultResource *resource.Resource) (*log.LoggerProvider, error) {
 	switch os.Getenv("OTEL_LOGS_EXPORTER") {
 	case "console":
-		exp, err := stdoutlog.New()
-		if err != nil {
-			return nil, err
-		}
+		// exp, err := stdoutlog.New()
+		// if err != nil {
+		// 	return nil, err
+		// }
+		//
+		// lp := log.NewLoggerProvider(
+		// 	log.WithProcessor(log.NewBatchProcessor(exp)),
+		// 	log.WithResource(defaultResource),
+		// )
+		// slog.SetDefault(otelslog.NewLogger("echoserver", otelslog.WithSource(true), otelslog.WithVersion(version.Version)))
+		// return lp, nil
 
-		return log.NewLoggerProvider(
-			log.WithProcessor(log.NewBatchProcessor(exp)),
-			log.WithResource(defaultResource),
-		), nil
+		// Instead of the stdout exporter we use a simple slog logger for
+		// better readability.
+		setupConsoleLogger()
+
+		lp := log.NewLoggerProvider()
+		lp.LoggerProvider = logNoop.NewLoggerProvider()
+		return lp, nil
 	case "otlp":
 		exp, err := otlploggrpc.New(ctx, otlploggrpc.WithInsecure())
 		if err != nil {
 			return nil, err
 		}
 
-		return log.NewLoggerProvider(
+		lp := log.NewLoggerProvider(
 			log.WithProcessor(log.NewBatchProcessor(exp)),
 			log.WithResource(defaultResource),
-		), nil
+		)
+		slog.SetDefault(otelslog.NewLogger("echoserver", otelslog.WithSource(true), otelslog.WithVersion(version.Version)))
+		return lp, nil
 	default:
-		tp := log.NewLoggerProvider()
-		tp.LoggerProvider = logNoop.NewLoggerProvider()
-		return tp, nil
+		lp := log.NewLoggerProvider()
+		lp.LoggerProvider = logNoop.NewLoggerProvider()
+		return lp, nil
 	}
 }
 
