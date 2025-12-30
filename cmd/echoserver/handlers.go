@@ -123,6 +123,34 @@ func timeoutHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if flushString := r.URL.Query().Get("flush"); flushString != "" {
+		if flush, err := time.ParseDuration(flushString); err == nil && flush > 0 {
+			done := make(chan bool)
+
+			go func() {
+				ticker := time.NewTicker(flush)
+				defer ticker.Stop()
+
+				for {
+					select {
+					case <-done:
+						return
+					case <-ticker.C:
+						if f, ok := w.(http.Flusher); ok {
+							span.AddEvent("Flush")
+							w.Write([]byte(http.StatusText(http.StatusProcessing) + "\n"))
+							f.Flush()
+						}
+					}
+				}
+			}()
+
+			defer func() {
+				done <- true
+			}()
+		}
+	}
+
 	select {
 	case <-ctx.Done():
 		render.Status(r, http.StatusBadRequest)

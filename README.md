@@ -97,7 +97,7 @@ curl -vvv "http://localhost:8080/"
 curl -vvv "http://localhost:8080/panic"
 curl -vvv "http://localhost:8080/status"
 curl -vvv "http://localhost:8080/status?status=400"
-curl -vvv "http://localhost:8080/timeout?timeout=10s"
+curl -vvv "http://localhost:8080/timeout?timeout=10s&flush=2s"
 curl -vvv "http://localhost:8080/headersize?size=100"
 curl -vvv -X POST -d '{"method": "POST", "url": "http://localhost:8080/", "body": "test", "headers": {"x-test": "test"}}' http://localhost:8080/request
 curl -vvv "http://localhost:8080/fibonacci?n=100"
