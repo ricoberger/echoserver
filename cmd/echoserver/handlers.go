@@ -15,12 +15,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
 	"github.com/gorilla/websocket"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 func echoHandler(w http.ResponseWriter, r *http.Request) {
@@ -239,6 +242,11 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 		req.Header.Add(key, value)
 	}
 
+	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
+	if requestId := middleware.GetReqID(ctx); requestId != "" {
+		req.Header.Set("x-request-id", requestId)
+	}
+
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to do http request.", slog.Any("error", err))
@@ -305,9 +313,9 @@ func fibonacciHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	span.AddEvent("fibonacci.start")
+	span.AddEvent("Start calculation")
 	res, _ := fibonacci(n)
-	span.AddEvent("fibonacci.done")
+	span.AddEvent("Calculation completed")
 
 	render.Status(r, http.StatusOK)
 	render.PlainText(w, r, res.String())
@@ -335,7 +343,7 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 
 	c.SetPongHandler(func(string) error {
 		slog.DebugContext(ctx, "Received pong from client.")
-		span.AddEvent("Received pong from client.")
+		span.AddEvent("Received pong from client")
 		c.SetReadDeadline(time.Now().Add(30 * time.Second))
 		return nil
 	})
@@ -345,7 +353,7 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 			<-ticker.C
 
 			slog.DebugContext(ctx, "Sent ping to client.")
-			span.AddEvent("Sent ping to client.")
+			span.AddEvent("Sent ping to client")
 
 			if err := c.WriteMessage(websocket.PingMessage, nil); err != nil {
 				slog.ErrorContext(ctx, "Failed to send ping.", slog.Any("error", err))

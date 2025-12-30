@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"runtime/debug"
 	"strconv"
@@ -17,7 +18,8 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
-	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
+	httpconv "go.opentelemetry.io/otel/semconv/v1.38.0/httpconv"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
@@ -38,8 +40,9 @@ var (
 	meter  = otel.Meter("instrument")
 
 	reqCount    metric.Int64Counter
-	reqDuration metric.Float64Histogram
-	respSize    metric.Int64Histogram
+	reqDuration httpconv.ServerRequestDuration
+	reqSize     httpconv.ServerRequestBodySize
+	respSize    httpconv.ServerResponseBodySize
 )
 
 func init() {
@@ -47,16 +50,9 @@ func init() {
 		"http.server.request.total",
 		metric.WithDescription("Number of HTTP requests processed, partitioned by status code, method and path."),
 	)
-	reqDuration, _ = meter.Float64Histogram(
-		"http.server.request.duration",
-		metric.WithDescription("Latency of HTTP requests processed, partitioned by status code, method and path."),
-		metric.WithExplicitBucketBoundaries(0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10),
-	)
-	respSize, _ = meter.Int64Histogram(
-		"http.server.response.body.size",
-		metric.WithDescription("Size of HTTP responses, partitioned by status code, method and path."),
-		metric.WithExplicitBucketBoundaries(1024, 32768, 1048576, 33554432, 134217728, 536870912, 1073741824),
-	)
+	reqDuration, _ = httpconv.NewServerRequestDuration(meter, metric.WithExplicitBucketBoundaries(0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10))
+	reqSize, _ = httpconv.NewServerRequestBodySize(meter)
+	respSize, _ = httpconv.NewServerResponseBodySize(meter)
 }
 
 func Handler() func(next http.Handler) http.Handler {
@@ -90,29 +86,35 @@ func handleTraces(requestInfo *RequestInfo) func(next http.Handler) http.Handler
 			requestInfo.TraceFlags = span.SpanContext().TraceFlags()
 			requestInfo.TraceState = span.SpanContext().TraceState()
 
-			scheme := "http"
-			if r.TLS != nil {
-				scheme = "https"
-			}
-
 			defer func() {
-				// In go-chi/chi, full route pattern could only be extracted
-				// once the request is executed
-				// See: https://github.com/go-chi/chi/issues/150#issuecomment-278850733
-				routeStr := strings.Join(chi.RouteContext(r.Context()).RoutePatterns, "")
-				span.SetAttributes(semconv.HTTPScheme(scheme))
-				span.SetAttributes(semconv.HTTPRoute(routeStr))
-				span.SetAttributes(semconv.ClientAddress(r.RemoteAddr))
-				span.SetAttributes(semconv.HTTPMethod(r.Method))
-				span.SetAttributes(semconv.HTTPUserAgent(r.UserAgent()))
-				span.SetAttributes(semconv.HTTPRequestContentLength(int(r.ContentLength)))
-				span.SetAttributes(semconv.HTTPURL(fmt.Sprintf("%s://%s%s", scheme, r.Host, r.RequestURI)))
+				scheme := "http"
+				if r.TLS != nil {
+					scheme = "https"
+				}
+				serverAddress, serverPortStr, _ := net.SplitHostPort(r.Host)
+				clientAddress, clientPortStr, _ := net.SplitHostPort(r.Host)
+				serverPort := parsePort(serverPortStr)
+				clientPort := parsePort(clientPortStr)
+				route := chi.RouteContext(ctx).RoutePattern()
+
+				span.SetAttributes(semconv.HTTPRequestMethodKey.String(r.Method))
+				span.SetAttributes(semconv.HTTPRoute(route))
+				span.SetAttributes(semconv.URLScheme(scheme))
+				span.SetAttributes(semconv.NetworkProtocolName("http"))
+				span.SetAttributes(semconv.NetworkProtocolVersion(fmt.Sprintf("%d.%d", r.ProtoMajor, r.ProtoMinor)))
+				span.SetAttributes(semconv.ServerAddress(serverAddress))
+				span.SetAttributes(semconv.ServerPort(serverPort))
+				span.SetAttributes(semconv.ClientAddress(clientAddress))
+				span.SetAttributes(semconv.ClientPort(clientPort))
+				span.SetAttributes(semconv.UserAgentOriginal(r.UserAgent()))
+				span.SetAttributes(attribute.Key(semconv.HTTPRequestBodySizeKey).Int64(r.ContentLength))
+				span.SetAttributes(semconv.URLFull(fmt.Sprintf("%s://%s%s", scheme, r.Host, r.RequestURI)))
 
 				if requestId := middleware.GetReqID(ctx); requestId != "" {
 					span.SetAttributes(attribute.Key("http.request_id").String(requestId))
 				}
 
-				span.SetName(fmt.Sprintf("%s:%s", r.Method, routeStr))
+				span.SetName(fmt.Sprintf("%s:%s", r.Method, route))
 
 				if err := recover(); err != nil {
 					span.SetAttributes(semconv.HTTPResponseStatusCode(500))
@@ -155,60 +157,123 @@ func handleMetricsAndLogs(r *http.Request, requestInfo *RequestInfo) {
 			Remote:     false,
 		}))
 
-		path := chi.RouteContext(ctx).RoutePattern()
+		scheme := "http"
+		if r.TLS != nil {
+			scheme = "https"
+		}
+		serverAddress, serverPortStr, _ := net.SplitHostPort(r.Host)
+		clientAddress, clientPortStr, _ := net.SplitHostPort(r.Host)
+		serverPort := parsePort(serverPortStr)
+		clientPort := parsePort(clientPortStr)
+		route := chi.RouteContext(ctx).RoutePattern()
 		status := requestInfo.Metrics.Code
 		duration := requestInfo.Metrics.Duration
 		written := requestInfo.Metrics.Written
 
 		reqCount.Add(ctx, 1, metric.WithAttributes(
-			attribute.String("http.response.status_code", strconv.Itoa(status)),
-			attribute.String("http.request.method", r.Method),
-			attribute.String("http.route", path),
+			semconv.HTTPResponseStatusCode(status),
+			semconv.HTTPRequestMethodKey.String(r.Method),
+			semconv.HTTPRoute(route),
+			semconv.URLScheme(scheme),
+			semconv.NetworkProtocolName("http"),
+			semconv.NetworkProtocolVersion(fmt.Sprintf("%d.%d", r.ProtoMajor, r.ProtoMinor)),
+			semconv.ServerAddress(serverAddress),
+			semconv.ServerPort(serverPort),
 		))
-		reqDuration.Record(ctx, duration.Seconds(), metric.WithAttributes(
-			attribute.String("http.response.status_code", strconv.Itoa(status)),
-			attribute.String("http.request.method", r.Method),
-			attribute.String("http.route", path),
-		))
-		respSize.Record(ctx, written, metric.WithAttributes(
-			attribute.String("http.response.status_code", strconv.Itoa(status)),
-			attribute.String("http.request.method", r.Method),
-			attribute.String("http.route", path),
-		))
-
-		scheme := "http"
-		if r.TLS != nil {
-			scheme = "https"
-		}
+		reqDuration.Record(ctx, duration.Seconds(), getMethod(r.Method), scheme,
+			semconv.HTTPResponseStatusCode(status),
+			semconv.HTTPRoute(route),
+			semconv.NetworkProtocolName("http"),
+			semconv.NetworkProtocolVersion(fmt.Sprintf("%d.%d", r.ProtoMajor, r.ProtoMinor)),
+			semconv.ServerAddress(serverAddress),
+			semconv.ServerPort(serverPort),
+		)
+		reqSize.Record(ctx, r.ContentLength, getMethod(r.Method), scheme,
+			semconv.HTTPResponseStatusCode(status),
+			semconv.HTTPRoute(route),
+			semconv.NetworkProtocolName("http"),
+			semconv.NetworkProtocolVersion(fmt.Sprintf("%d.%d", r.ProtoMajor, r.ProtoMinor)),
+			semconv.ServerAddress(serverAddress),
+			semconv.ServerPort(serverPort),
+		)
+		respSize.Record(ctx, written, getMethod(r.Method), scheme,
+			semconv.HTTPResponseStatusCode(status),
+			semconv.HTTPRoute(route),
+			semconv.NetworkProtocolName("http"),
+			semconv.NetworkProtocolVersion(fmt.Sprintf("%d.%d", r.ProtoMajor, r.ProtoMinor)),
+			semconv.ServerAddress(serverAddress),
+			semconv.ServerPort(serverPort),
+		)
 
 		if status >= 500 {
 			slog.ErrorContext(
 				ctx,
 				"Request completed.",
-				slog.String("http_scheme", scheme),
-				slog.String("http_proto", r.Proto),
-				slog.String("http_method", r.Method),
-				slog.String("http_remote_address", r.RemoteAddr),
-				slog.String("http_user_agent", strings.ReplaceAll(strings.ReplaceAll(r.UserAgent(), "\n", ""), "\r", "")),
-				slog.String("http_url", fmt.Sprintf("%s://%s%s", scheme, r.Host, r.RequestURI)),
-				slog.Duration("http_request_duration", duration),
 				slog.Int("http_response_status_code", status),
-				slog.Int64("http_response_size", written),
+				slog.String("http_request_method", r.Method),
+				slog.String("http_route", route),
+				slog.String("user_agent_original", strings.ReplaceAll(strings.ReplaceAll(r.UserAgent(), "\n", ""), "\r", "")),
+				slog.String("http_remote_address", r.RemoteAddr),
+				slog.String("http_scheme", scheme),
+				slog.String("network_protocol_name", "http"),
+				slog.String("network_protocol_version", fmt.Sprintf("%d.%d", r.ProtoMajor, r.ProtoMinor)),
+				slog.String("server_address", serverAddress),
+				slog.Int("server_port", serverPort),
+				slog.String("client_address", clientAddress),
+				slog.Int("client_port", clientPort),
+				slog.Int64("http_request_body_size", r.ContentLength),
+				slog.String("url_full", fmt.Sprintf("%s://%s%s", scheme, r.Host, r.RequestURI)),
+				slog.Int64("http_response_body_size", written),
+				slog.Duration("http_request_duration", duration),
 			)
 		} else {
 			slog.InfoContext(
 				ctx,
 				"Request completed.",
-				slog.String("http_scheme", scheme),
-				slog.String("http_proto", r.Proto),
-				slog.String("http_method", r.Method),
-				slog.String("http_remote_address", r.RemoteAddr),
-				slog.String("http_user_agent", strings.ReplaceAll(strings.ReplaceAll(r.UserAgent(), "\n", ""), "\r", "")),
-				slog.String("http_url", fmt.Sprintf("%s://%s%s", scheme, r.Host, r.RequestURI)),
-				slog.Duration("http_request_duration", duration),
 				slog.Int("http_response_status_code", status),
-				slog.Int64("http_response_size", written),
+				slog.String("http_request_method", r.Method),
+				slog.String("http_route", route),
+				slog.String("user_agent_original", strings.ReplaceAll(strings.ReplaceAll(r.UserAgent(), "\n", ""), "\r", "")),
+				slog.String("http_remote_address", r.RemoteAddr),
+				slog.String("http_scheme", scheme),
+				slog.String("network_protocol_name", "http"),
+				slog.String("network_protocol_version", fmt.Sprintf("%d.%d", r.ProtoMajor, r.ProtoMinor)),
+				slog.String("server_address", serverAddress),
+				slog.Int("server_port", serverPort),
+				slog.String("client_address", clientAddress),
+				slog.Int("client_port", clientPort),
+				slog.Int64("http_request_body_size", r.ContentLength),
+				slog.String("url_full", fmt.Sprintf("%s://%s%s", scheme, r.Host, r.RequestURI)),
+				slog.Int64("http_response_body_size", written),
+				slog.Duration("http_request_duration", duration),
 			)
 		}
 	}
+}
+
+func getMethod(method string) httpconv.RequestMethodAttr {
+	var methodLookup = map[string]httpconv.RequestMethodAttr{
+		http.MethodConnect: httpconv.RequestMethodConnect,
+		http.MethodDelete:  httpconv.RequestMethodDelete,
+		http.MethodGet:     httpconv.RequestMethodGet,
+		http.MethodHead:    httpconv.RequestMethodHead,
+		http.MethodOptions: httpconv.RequestMethodOptions,
+		http.MethodPatch:   httpconv.RequestMethodPatch,
+		http.MethodPost:    httpconv.RequestMethodPost,
+		http.MethodPut:     httpconv.RequestMethodPut,
+		http.MethodTrace:   httpconv.RequestMethodTrace,
+	}
+
+	if method == "" {
+		return httpconv.RequestMethodGet
+	}
+	if attr, ok := methodLookup[method]; ok {
+		return attr
+	}
+	return httpconv.RequestMethodGet
+}
+
+func parsePort(port string) int {
+	p, _ := strconv.ParseInt(port, 10, 64)
+	return int(p)
 }

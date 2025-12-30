@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/go-chi/chi/v5/middleware"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -38,6 +39,10 @@ type customHandler struct {
 }
 
 func (h *customHandler) Handle(ctx context.Context, r slog.Record) error {
+	if requestId := middleware.GetReqID(ctx); requestId != "" {
+		r.Add("http_request_id", slog.StringValue(requestId))
+	}
+
 	span := trace.SpanFromContext(ctx)
 	r.Add("trace_id", slog.StringValue(span.SpanContext().TraceID().String()))
 	r.Add("trace_flags", slog.StringValue(span.SpanContext().TraceFlags().String()))
