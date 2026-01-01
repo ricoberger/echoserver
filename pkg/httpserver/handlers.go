@@ -103,6 +103,7 @@ func timeoutHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, span := tracer.Start(r.Context(), "timeoutHandler")
 	defer span.End()
 	span.SetAttributes(attribute.Key("http.parameter.timeout").String(r.URL.Query().Get("timeout")))
+	span.SetAttributes(attribute.Key("http.parameter.flush").String(r.URL.Query().Get("flush")))
 
 	timeoutString := r.URL.Query().Get("timeout")
 	if timeoutString == "" {

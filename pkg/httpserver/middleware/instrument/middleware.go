@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"runtime/debug"
 	"strconv"
-	"strings"
 
 	"github.com/felixge/httpsnoop"
 	"github.com/go-chi/chi/v5"
@@ -92,7 +91,7 @@ func handleTraces(requestInfo *RequestInfo) func(next http.Handler) http.Handler
 					scheme = "https"
 				}
 				serverAddress, serverPortStr, _ := net.SplitHostPort(r.Host)
-				clientAddress, clientPortStr, _ := net.SplitHostPort(r.Host)
+				clientAddress, clientPortStr, _ := net.SplitHostPort(r.RemoteAddr)
 				serverPort := parsePort(serverPortStr)
 				clientPort := parsePort(clientPortStr)
 				route := chi.RouteContext(ctx).RoutePattern()
@@ -100,15 +99,18 @@ func handleTraces(requestInfo *RequestInfo) func(next http.Handler) http.Handler
 				span.SetAttributes(semconv.HTTPRequestMethodKey.String(r.Method))
 				span.SetAttributes(semconv.HTTPRoute(route))
 				span.SetAttributes(semconv.URLScheme(scheme))
+				span.SetAttributes(semconv.URLPath(r.URL.Path))
+				span.SetAttributes(semconv.URLFull(r.URL.String()))
+				span.SetAttributes(semconv.UserAgentOriginal(r.UserAgent()))
 				span.SetAttributes(semconv.NetworkProtocolName("http"))
 				span.SetAttributes(semconv.NetworkProtocolVersion(fmt.Sprintf("%d.%d", r.ProtoMajor, r.ProtoMinor)))
 				span.SetAttributes(semconv.ServerAddress(serverAddress))
 				span.SetAttributes(semconv.ServerPort(serverPort))
 				span.SetAttributes(semconv.ClientAddress(clientAddress))
 				span.SetAttributes(semconv.ClientPort(clientPort))
-				span.SetAttributes(semconv.UserAgentOriginal(r.UserAgent()))
+				span.SetAttributes(semconv.NetworkPeerAddress(clientAddress))
+				span.SetAttributes(semconv.NetworkPeerPort(clientPort))
 				span.SetAttributes(attribute.Key(semconv.HTTPRequestBodySizeKey).Int64(r.ContentLength))
-				span.SetAttributes(semconv.URLFull(fmt.Sprintf("%s://%s%s", scheme, r.Host, r.RequestURI)))
 
 				if requestId := middleware.GetReqID(ctx); requestId != "" {
 					span.SetAttributes(attribute.Key("http.request_id").String(requestId))
@@ -139,7 +141,7 @@ func handleTraces(requestInfo *RequestInfo) func(next http.Handler) http.Handler
 				status := requestInfo.Metrics.Code
 				written := requestInfo.Metrics.Written
 
-				span.SetAttributes(semconv.HTTPResponseSize(int(written)))
+				span.SetAttributes(semconv.HTTPResponseBodySize(int(written)))
 				span.SetAttributes(semconv.HTTPResponseStatusCode(status))
 				span.SetStatus(codes.Ok, http.StatusText(status))
 			}
@@ -162,7 +164,7 @@ func handleMetricsAndLogs(r *http.Request, requestInfo *RequestInfo) {
 			scheme = "https"
 		}
 		serverAddress, serverPortStr, _ := net.SplitHostPort(r.Host)
-		clientAddress, clientPortStr, _ := net.SplitHostPort(r.Host)
+		clientAddress, clientPortStr, _ := net.SplitHostPort(r.RemoteAddr)
 		serverPort := parsePort(serverPortStr)
 		clientPort := parsePort(clientPortStr)
 		route := chi.RouteContext(ctx).RoutePattern()
@@ -205,49 +207,28 @@ func handleMetricsAndLogs(r *http.Request, requestInfo *RequestInfo) {
 			semconv.ServerPort(serverPort),
 		)
 
-		if status >= 500 {
-			slog.ErrorContext(
-				ctx,
-				"Request completed.",
-				slog.Int("http_response_status_code", status),
-				slog.String("http_request_method", r.Method),
-				slog.String("http_route", route),
-				slog.String("user_agent_original", strings.ReplaceAll(strings.ReplaceAll(r.UserAgent(), "\n", ""), "\r", "")),
-				slog.String("http_remote_address", r.RemoteAddr),
-				slog.String("http_scheme", scheme),
-				slog.String("network_protocol_name", "http"),
-				slog.String("network_protocol_version", fmt.Sprintf("%d.%d", r.ProtoMajor, r.ProtoMinor)),
-				slog.String("server_address", serverAddress),
-				slog.Int("server_port", serverPort),
-				slog.String("client_address", clientAddress),
-				slog.Int("client_port", clientPort),
-				slog.Int64("http_request_body_size", r.ContentLength),
-				slog.String("url_full", fmt.Sprintf("%s://%s%s", scheme, r.Host, r.RequestURI)),
-				slog.Int64("http_response_body_size", written),
-				slog.Duration("http_request_duration", duration),
-			)
-		} else {
-			slog.InfoContext(
-				ctx,
-				"Request completed.",
-				slog.Int("http_response_status_code", status),
-				slog.String("http_request_method", r.Method),
-				slog.String("http_route", route),
-				slog.String("user_agent_original", strings.ReplaceAll(strings.ReplaceAll(r.UserAgent(), "\n", ""), "\r", "")),
-				slog.String("http_remote_address", r.RemoteAddr),
-				slog.String("http_scheme", scheme),
-				slog.String("network_protocol_name", "http"),
-				slog.String("network_protocol_version", fmt.Sprintf("%d.%d", r.ProtoMajor, r.ProtoMinor)),
-				slog.String("server_address", serverAddress),
-				slog.Int("server_port", serverPort),
-				slog.String("client_address", clientAddress),
-				slog.Int("client_port", clientPort),
-				slog.Int64("http_request_body_size", r.ContentLength),
-				slog.String("url_full", fmt.Sprintf("%s://%s%s", scheme, r.Host, r.RequestURI)),
-				slog.Int64("http_response_body_size", written),
-				slog.Duration("http_request_duration", duration),
-			)
-		}
+		slog.InfoContext(
+			ctx,
+			"Request completed.",
+			slog.Int("http_response_status_code", status),
+			slog.String("http_request_method", r.Method),
+			slog.String("http_route", route),
+			slog.String("url_scheme", scheme),
+			slog.String("url_path", r.URL.Path),
+			slog.String("url_full", r.URL.String()),
+			slog.String("user_agent_original", r.UserAgent()),
+			slog.String("network_protocol_name", "http"),
+			slog.String("network_protocol_version", fmt.Sprintf("%d.%d", r.ProtoMajor, r.ProtoMinor)),
+			slog.String("server_address", serverAddress),
+			slog.Int("server_port", serverPort),
+			slog.String("client_address", clientAddress),
+			slog.Int("client_port", clientPort),
+			slog.String("network_peer_address", clientAddress),
+			slog.Int("network_peer_port", clientPort),
+			slog.Int64("http_request_body_size", r.ContentLength),
+			slog.Int64("http_response_body_size", written),
+			slog.Duration("http_request_duration", duration),
+		)
 	}
 }
 
