@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/ricoberger/echoserver/pkg/instrument"
+	"github.com/ricoberger/echoserver/pkg/httpserver/middleware/instrument"
 
 	"github.com/felixge/fgprof"
 	"github.com/go-chi/chi/v5"
