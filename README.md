@@ -55,8 +55,8 @@ helm upgrade --install echoserver oci://ghcr.io/ricoberger/charts/echoserver --v
 Usage: echoserver [flags]
 
 Flags:
-  -h, --help               Show context-sensitive help.
-      --address=":8080"    The address where the server should listen on ($ADDRESS).
+  -h, --help                           Show context-sensitive help.
+      --http-server.address=":8080"    The address where the server should listen on ($HTTP_SERVER_ADDRESS).
 ```
 
 ```sh
