@@ -157,13 +157,11 @@ func timeoutHandler(w http.ResponseWriter, r *http.Request) {
 
 	select {
 	case <-ctx.Done():
-		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(http.StatusText(http.StatusBadRequest)))
 		return
 	case <-time.After(timeout):
 	}
 
-	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(http.StatusText(http.StatusOK)))
 }
 
