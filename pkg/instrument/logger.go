@@ -13,7 +13,11 @@ func setupConsoleLogger() *slog.Logger {
 	var handler slog.Handler
 
 	var level slog.Level
-	level.UnmarshalText([]byte(os.Getenv("LOG_LEVEL")))
+	if os.Getenv("LOG_LEVEL") != "" {
+		level.UnmarshalText([]byte(os.Getenv("LOG_LEVEL")))
+	} else {
+		level = slog.LevelInfo
+	}
 
 	if os.Getenv("LOG_FORMAT") == "json" {
 		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
@@ -27,35 +31,28 @@ func setupConsoleLogger() *slog.Logger {
 		})
 	}
 
-	handler = &customHandler{handler}
+	handler = &CustomHandler{handler}
 	logger := slog.New(handler)
 	slog.SetDefault(logger)
 
 	return logger
 }
 
-type customHandler struct {
+type CustomHandler struct {
 	slog.Handler
 }
 
-func (h *customHandler) Handle(ctx context.Context, r slog.Record) error {
+func (h *CustomHandler) Handle(ctx context.Context, r slog.Record) error {
 	if requestId := middleware.GetReqID(ctx); requestId != "" {
 		r.Add("http_request_id", slog.StringValue(requestId))
 	}
 
-	span := trace.SpanFromContext(ctx)
-	r.Add("trace_id", slog.StringValue(span.SpanContext().TraceID().String()))
-	r.Add("trace_flags", slog.StringValue(span.SpanContext().TraceFlags().String()))
-	r.Add("span_id", slog.StringValue(span.SpanContext().SpanID().String()))
+	span := trace.SpanContextFromContext(ctx)
+	if span.HasTraceID() && span.HasSpanID() {
+		r.Add("trace_id", slog.StringValue(span.TraceID().String()))
+		r.Add("trace_flags", slog.StringValue(span.TraceFlags().String()))
+		r.Add("span_id", slog.StringValue(span.SpanID().String()))
+	}
 
 	return h.Handler.Handle(ctx, r)
-}
-
-func (c *customHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return c.clone()
-}
-
-func (c *customHandler) clone() *customHandler {
-	clone := *c
-	return &clone
 }

@@ -102,3 +102,15 @@ curl -vvv "http://localhost:8080/headersize?size=100"
 curl -vvv -X POST -d '{"method": "POST", "url": "http://localhost:8080/", "body": "test", "headers": {"x-test": "test"}}' http://localhost:8080/request
 curl -vvv "http://localhost:8080/fibonacci?n=100"
 ```
+
+```sh
+grpcurl -format-error -plaintext -d '{ "message": "Hello" }' 'localhost:8081' Echoserver.Echo
+grpcurl -format-error -plaintext -d '{ "status": "random" }' 'localhost:8081' Echoserver.Status
+grpcurl -format-error -plaintext -d '{ "uri": "localhost:8081", "method": "Echoserver.Status", "message": "{ \"status\": \"random\" }" }' 'localhost:8081' Echoserver.Request
+grpcurl -format-error -plaintext -d '{ "uri": "localhost:8081", "method": "Echoserver.Echo", "message": "{ \"message\": \"Hello\" }" }' 'localhost:8081' Echoserver.Request
+
+# List endpoints, list methods for a specific endpoint and describe a method
+grpcurl -plaintext 'localhost:8081' list
+grpcurl -plaintext 'localhost:8081' list Echoserver
+grpcurl -plaintext 'localhost:8081' describe Echoserver.Echo
+```

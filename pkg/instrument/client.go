@@ -154,6 +154,7 @@ func newLoggerProvider(ctx context.Context, defaultResource *resource.Resource) 
 	default:
 		lp := log.NewLoggerProvider()
 		lp.LoggerProvider = logNoop.NewLoggerProvider()
+		slog.SetDefault(otelslog.NewLogger("echoserver", otelslog.WithSource(true), otelslog.WithVersion(version.Version)))
 		return lp, nil
 	}
 }

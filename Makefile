@@ -19,3 +19,9 @@ test:
 	# Run tests and generate coverage report. To view the coverage report in a
 	# browser run "go tool cover -html=coverage.out".
 	go test -covermode=atomic -coverpkg=./... -coverprofile=coverage.out -v ./...
+
+.PHONY: generate
+generate:
+	# go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+	# go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+	go generate ./...

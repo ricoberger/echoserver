@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/ricoberger/echoserver/pkg/grpcserver"
 	"github.com/ricoberger/echoserver/pkg/httpserver"
 	"github.com/ricoberger/echoserver/pkg/instrument"
 	"github.com/ricoberger/echoserver/pkg/version"
@@ -16,6 +17,7 @@ import (
 
 type Cli struct {
 	HTTPServer httpserver.Config `embed:"" prefix:"http-server." envprefix:"HTTP_SERVER_"`
+	GRPCServer grpcserver.Config `embed:"" prefix:"grpc-server." envprefix:"GRPC_SERVER_"`
 }
 
 func main() {
@@ -39,6 +41,9 @@ func (c *Cli) run() error {
 	httpServer := httpserver.New(c.HTTPServer)
 	go httpServer.Start()
 
+	grpcServer := grpcserver.New(c.GRPCServer)
+	go grpcServer.Start()
+
 	// All components should be terminated gracefully. For that we are listen
 	// for the SIGINT and SIGTERM signals and try to gracefully shutdown the
 	// started components. This ensures that established connections or tasks
@@ -50,6 +55,7 @@ func (c *Cli) run() error {
 	<-done
 	slog.Info("Shutdown started.")
 
+	grpcServer.Stop()
 	httpServer.Stop()
 
 	slog.Info("Shutdown done.")

@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+option go_package = "github.com/ricoberger/echoserver/pkg/grpcserver/proto";
+
+service Echoserver {
+  rpc Echo (EchoRequest) returns (EchoResponse) {}
+  rpc Status (StatusRequest) returns (StatusResponse) {}
+  rpc Request (RequestRequest) returns (RequestResponse) {}
+}
+
+message EchoRequest {
+  string message = 1;
+}
+
+message EchoResponse {
+  string message = 1;
+}
+
+
+message StatusRequest {
+  string status = 1;
+}
+
+message StatusResponse {
+}
+
+message RequestRequest {
+  string uri = 1;
+  string method = 2;
+  string message = 3;
+}
+
+message RequestResponse {
+  string message = 2;
+}
