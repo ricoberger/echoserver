@@ -1,165 +1,28 @@
 package instrument
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
-	"runtime/debug"
 	"strconv"
+	"strings"
 
 	"github.com/ricoberger/echoserver/pkg/httpserver/middleware/requestid"
 
 	"github.com/felixge/httpsnoop"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/propagation"
-	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
-	httpconv "go.opentelemetry.io/otel/semconv/v1.38.0/httpconv"
-	oteltrace "go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace"
 )
-
-type ctxKeyRequestInfo int
-
-const RequestInfoKey ctxKeyRequestInfo = 0
-
-type RequestInfo struct {
-	Metrics    *httpsnoop.Metrics
-	TraceId    oteltrace.TraceID
-	SpanId     oteltrace.SpanID
-	TraceFlags oteltrace.TraceFlags
-	TraceState oteltrace.TraceState
-}
-
-var (
-	tracer = otel.Tracer("instrument")
-	meter  = otel.Meter("instrument")
-
-	reqCount    metric.Int64Counter
-	reqDuration httpconv.ServerRequestDuration
-	reqSize     httpconv.ServerRequestBodySize
-	respSize    httpconv.ServerResponseBodySize
-)
-
-func init() {
-	reqCount, _ = meter.Int64Counter(
-		"http.server.request.total",
-		metric.WithDescription("Number of HTTP requests processed, partitioned by status code, method and path."),
-	)
-	reqDuration, _ = httpconv.NewServerRequestDuration(meter, metric.WithExplicitBucketBoundaries(0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10))
-	reqSize, _ = httpconv.NewServerRequestBodySize(meter)
-	respSize, _ = httpconv.NewServerResponseBodySize(meter)
-}
 
 func Handler(next http.Handler) http.Handler {
 	fn := func(w http.ResponseWriter, r *http.Request) {
-		var requestInfo = &RequestInfo{}
-		r = r.WithContext(context.WithValue(r.Context(), RequestInfoKey, requestInfo))
+		m := httpsnoop.CaptureMetrics(next, w, r)
 
-		handler := handleTraces(requestInfo)(next)
+		ctx := r.Context()
 
-		requestInfo.Metrics = &httpsnoop.Metrics{
-			Code: http.StatusOK,
-		}
-		requestInfo.Metrics.CaptureMetrics(w, func(ww http.ResponseWriter) {
-			handler.ServeHTTP(ww, r)
-		})
-		handleMetricsAndLogs(r, requestInfo)
-	}
-	return http.HandlerFunc(fn)
-}
-
-func handleTraces(requestInfo *RequestInfo) func(next http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
-			ctx, span := tracer.Start(ctx, "http.request", oteltrace.WithSpanKind(oteltrace.SpanKindServer))
-			defer span.End()
-
-			requestInfo.TraceId = span.SpanContext().TraceID()
-			requestInfo.SpanId = span.SpanContext().SpanID()
-			requestInfo.TraceFlags = span.SpanContext().TraceFlags()
-			requestInfo.TraceState = span.SpanContext().TraceState()
-
-			defer func() {
-				scheme := "http"
-				if r.TLS != nil {
-					scheme = "https"
-				}
-				serverAddress, serverPortStr, _ := net.SplitHostPort(r.Host)
-				clientAddress, clientPortStr, _ := net.SplitHostPort(r.RemoteAddr)
-				serverPort := parsePort(serverPortStr)
-				clientPort := parsePort(clientPortStr)
-				route := r.Pattern
-				if route == "" {
-					route = r.URL.Path
-				}
-
-				span.SetAttributes(semconv.HTTPRequestMethodKey.String(r.Method))
-				span.SetAttributes(semconv.HTTPRoute(route))
-				span.SetAttributes(semconv.URLScheme(scheme))
-				span.SetAttributes(semconv.URLPath(r.URL.Path))
-				span.SetAttributes(semconv.URLFull(r.URL.String()))
-				span.SetAttributes(semconv.UserAgentOriginal(r.UserAgent()))
-				span.SetAttributes(semconv.NetworkProtocolName("http"))
-				span.SetAttributes(semconv.NetworkProtocolVersion(fmt.Sprintf("%d.%d", r.ProtoMajor, r.ProtoMinor)))
-				span.SetAttributes(semconv.ServerAddress(serverAddress))
-				span.SetAttributes(semconv.ServerPort(serverPort))
-				span.SetAttributes(semconv.ClientAddress(clientAddress))
-				span.SetAttributes(semconv.ClientPort(clientPort))
-				span.SetAttributes(semconv.NetworkPeerAddress(clientAddress))
-				span.SetAttributes(semconv.NetworkPeerPort(clientPort))
-				span.SetAttributes(attribute.Key(semconv.HTTPRequestBodySizeKey).Int64(r.ContentLength))
-
-				if requestId := requestid.Get(ctx); requestId != "" {
-					span.SetAttributes(attribute.Key("http.request_id").String(requestId))
-				}
-
-				span.SetName(fmt.Sprintf("%s:%s", r.Method, route))
-
-				if err := recover(); err != nil {
-					span.SetAttributes(semconv.HTTPResponseStatusCode(500))
-					span.SetStatus(codes.Error, fmt.Sprintf("%v", err))
-
-					span.AddEvent("panic", oteltrace.WithAttributes(
-						attribute.String("kind", "panic"),
-						attribute.String("message", fmt.Sprintf("%v", err)),
-						attribute.String("stack", string(debug.Stack())),
-					))
-					span.End()
-
-					slog.ErrorContext(ctx, "Recover panic.", slog.String("error", fmt.Sprintf("%v", err)), slog.String("stack", string(debug.Stack())))
-					http.Error(w, fmt.Sprintf("%#v", err), http.StatusInternalServerError)
-				}
-			}()
-
-			r = r.WithContext(ctx)
-			next.ServeHTTP(w, r)
-
-			if requestInfo.Metrics != nil {
-				status := requestInfo.Metrics.Code
-				written := requestInfo.Metrics.Written
-
-				span.SetAttributes(semconv.HTTPResponseBodySize(int(written)))
-				span.SetAttributes(semconv.HTTPResponseStatusCode(status))
-				span.SetStatus(codes.Ok, http.StatusText(status))
-			}
-		})
-	}
-}
-
-func handleMetricsAndLogs(r *http.Request, requestInfo *RequestInfo) {
-	if requestInfo.Metrics != nil {
-		ctx := oteltrace.ContextWithSpanContext(r.Context(), oteltrace.NewSpanContext(oteltrace.SpanContextConfig{
-			TraceID:    requestInfo.TraceId,
-			SpanID:     requestInfo.SpanId,
-			TraceFlags: requestInfo.TraceFlags,
-			TraceState: requestInfo.TraceState,
-			Remote:     false,
-		}))
+		span := trace.SpanFromContext(ctx)
+		span.SetAttributes(attribute.String("http.request.id", requestid.Get(ctx)))
 
 		scheme := "http"
 		if r.TLS != nil {
@@ -169,54 +32,12 @@ func handleMetricsAndLogs(r *http.Request, requestInfo *RequestInfo) {
 		clientAddress, clientPortStr, _ := net.SplitHostPort(r.RemoteAddr)
 		serverPort := parsePort(serverPortStr)
 		clientPort := parsePort(clientPortStr)
-		route := r.Pattern
-		if route == "" {
-			route = r.URL.Path
-		}
-
-		status := requestInfo.Metrics.Code
-		duration := requestInfo.Metrics.Duration
-		written := requestInfo.Metrics.Written
-
-		reqCount.Add(ctx, 1, metric.WithAttributes(
-			semconv.HTTPResponseStatusCode(status),
-			semconv.HTTPRequestMethodKey.String(r.Method),
-			semconv.HTTPRoute(route),
-			semconv.URLScheme(scheme),
-			semconv.NetworkProtocolName("http"),
-			semconv.NetworkProtocolVersion(fmt.Sprintf("%d.%d", r.ProtoMajor, r.ProtoMinor)),
-			semconv.ServerAddress(serverAddress),
-			semconv.ServerPort(serverPort),
-		))
-		reqDuration.Record(ctx, duration.Seconds(), getMethod(r.Method), scheme,
-			semconv.HTTPResponseStatusCode(status),
-			semconv.HTTPRoute(route),
-			semconv.NetworkProtocolName("http"),
-			semconv.NetworkProtocolVersion(fmt.Sprintf("%d.%d", r.ProtoMajor, r.ProtoMinor)),
-			semconv.ServerAddress(serverAddress),
-			semconv.ServerPort(serverPort),
-		)
-		reqSize.Record(ctx, r.ContentLength, getMethod(r.Method), scheme,
-			semconv.HTTPResponseStatusCode(status),
-			semconv.HTTPRoute(route),
-			semconv.NetworkProtocolName("http"),
-			semconv.NetworkProtocolVersion(fmt.Sprintf("%d.%d", r.ProtoMajor, r.ProtoMinor)),
-			semconv.ServerAddress(serverAddress),
-			semconv.ServerPort(serverPort),
-		)
-		respSize.Record(ctx, written, getMethod(r.Method), scheme,
-			semconv.HTTPResponseStatusCode(status),
-			semconv.HTTPRoute(route),
-			semconv.NetworkProtocolName("http"),
-			semconv.NetworkProtocolVersion(fmt.Sprintf("%d.%d", r.ProtoMajor, r.ProtoMinor)),
-			semconv.ServerAddress(serverAddress),
-			semconv.ServerPort(serverPort),
-		)
+		route := GetRoute(r)
 
 		slog.InfoContext(
 			ctx,
 			"Request completed.",
-			slog.Int("http_response_status_code", status),
+			slog.Int("http_response_status_code", m.Code),
 			slog.String("http_request_method", r.Method),
 			slog.String("http_route", route),
 			slog.String("url_scheme", scheme),
@@ -232,32 +53,23 @@ func handleMetricsAndLogs(r *http.Request, requestInfo *RequestInfo) {
 			slog.String("network_peer_address", clientAddress),
 			slog.Int("network_peer_port", clientPort),
 			slog.Int64("http_request_body_size", r.ContentLength),
-			slog.Int64("http_response_body_size", written),
-			slog.Duration("http_request_duration", duration),
+			slog.Int64("http_response_body_size", m.Written),
+			slog.Duration("http_request_duration", m.Duration),
 		)
 	}
+
+	return http.HandlerFunc(fn)
 }
 
-func getMethod(method string) httpconv.RequestMethodAttr {
-	var methodLookup = map[string]httpconv.RequestMethodAttr{
-		http.MethodConnect: httpconv.RequestMethodConnect,
-		http.MethodDelete:  httpconv.RequestMethodDelete,
-		http.MethodGet:     httpconv.RequestMethodGet,
-		http.MethodHead:    httpconv.RequestMethodHead,
-		http.MethodOptions: httpconv.RequestMethodOptions,
-		http.MethodPatch:   httpconv.RequestMethodPatch,
-		http.MethodPost:    httpconv.RequestMethodPost,
-		http.MethodPut:     httpconv.RequestMethodPut,
-		http.MethodTrace:   httpconv.RequestMethodTrace,
+func GetRoute(r *http.Request) string {
+	if r.Pattern != "" {
+		parts := strings.SplitN(r.Pattern, " ", 2)
+		if len(parts) == 2 {
+			return parts[1]
+		}
+		return r.Pattern
 	}
-
-	if method == "" {
-		return httpconv.RequestMethodGet
-	}
-	if attr, ok := methodLookup[method]; ok {
-		return attr
-	}
-	return httpconv.RequestMethodGet
+	return r.URL.Path
 }
 
 func parsePort(port string) int {
