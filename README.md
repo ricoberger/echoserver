@@ -1,7 +1,7 @@
 # echoserver
 
-The `echoserver` is a HTTP server written in Go, which was mainly written to
-dump HTTP requests. Nowdays it can also be used to test / showcase the
+The `echoserver` is a HTTP / gRPC server written in Go, which was mainly written
+to dump HTTP requests. Nowdays it can also be used to test / showcase the
 instrumentation of a Go application with metrics, logs, traces and profiles. It
 can also be used to test the timeout / header size configuration of a reverse
 proxy. The following endpoints are available:
@@ -25,6 +25,16 @@ proxy. The following endpoints are available:
 - `/websocket`: Can be used to test WebSocket connections. It returns the
   message sent over the WebSocket connection.
 - `/metrics`: Returns the captured Prometheus metrics.
+
+The following gRPC endpoints are available:
+
+- `Echoserver.Echo`: Echoes the message sent in the request.
+- `Echoserver.Status`: Returns a gRPC error with the status specified in the
+  `status` field of the request or a random gRPC error when the value of the
+  `status` field is `random`.
+- `Echoserver.Request`: Forwards the request to the specified gRPC endpoint and
+  returns the response. The request message should have the following structure:
+  `{"uri": "localhost:8081", "method": "Echoserver.Echo", "message": "{ \"message\": \"Hello\" }"}`
 
 ## Building and Running
 
