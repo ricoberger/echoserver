@@ -6,9 +6,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/render"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,14 +14,12 @@ func TestHandler(t *testing.T) {
 		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		w := httptest.NewRecorder()
 
-		router := chi.NewRouter()
-		router.Use(middleware.RequestID)
-		router.Use(Handler())
-		router.Get("/", func(w http.ResponseWriter, r *http.Request) {
-			render.Status(r, http.StatusOK)
-			render.JSON(w, r, nil)
-		})
-		router.ServeHTTP(w, req)
+		mux := http.NewServeMux()
+		mux.Handle("/", Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(http.StatusText(http.StatusOK)))
+		})))
+		mux.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusOK, w.Code)
 	})
@@ -33,14 +28,12 @@ func TestHandler(t *testing.T) {
 		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		w := httptest.NewRecorder()
 
-		router := chi.NewRouter()
-		router.Use(middleware.RequestID)
-		router.Use(Handler())
-		router.Get("/", func(w http.ResponseWriter, r *http.Request) {
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, nil)
-		})
-		router.ServeHTTP(w, req)
+		mux := http.NewServeMux()
+		mux.Handle("/", Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(http.StatusText(http.StatusInternalServerError)))
+		})))
+		mux.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusInternalServerError, w.Code)
 	})
@@ -49,14 +42,14 @@ func TestHandler(t *testing.T) {
 		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		w := httptest.NewRecorder()
 
-		router := chi.NewRouter()
-		router.Use(Handler())
-		router.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		mux := http.NewServeMux()
+		mux.Handle("/", Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			panic("test")
-		})
+		})))
+		mux.ServeHTTP(w, req)
 
 		require.NotPanics(t, func() {
-			router.ServeHTTP(w, req)
+			mux.ServeHTTP(w, req)
 		})
 	})
 }
