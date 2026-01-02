@@ -9,9 +9,9 @@ import (
 	"runtime/debug"
 	"strconv"
 
+	"github.com/ricoberger/echoserver/pkg/httpserver/middleware/requestid"
+
 	"github.com/felixge/httpsnoop"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -54,23 +54,22 @@ func init() {
 	respSize, _ = httpconv.NewServerResponseBodySize(meter)
 }
 
-func Handler() func(next http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			var requestInfo = &RequestInfo{}
-			r = r.WithContext(context.WithValue(r.Context(), RequestInfoKey, requestInfo))
+func Handler(next http.Handler) http.Handler {
+	fn := func(w http.ResponseWriter, r *http.Request) {
+		var requestInfo = &RequestInfo{}
+		r = r.WithContext(context.WithValue(r.Context(), RequestInfoKey, requestInfo))
 
-			handler := handleTraces(requestInfo)(next)
+		handler := handleTraces(requestInfo)(next)
 
-			requestInfo.Metrics = &httpsnoop.Metrics{
-				Code: http.StatusOK,
-			}
-			requestInfo.Metrics.CaptureMetrics(w, func(ww http.ResponseWriter) {
-				handler.ServeHTTP(ww, r)
-			})
-			handleMetricsAndLogs(r, requestInfo)
+		requestInfo.Metrics = &httpsnoop.Metrics{
+			Code: http.StatusOK,
+		}
+		requestInfo.Metrics.CaptureMetrics(w, func(ww http.ResponseWriter) {
+			handler.ServeHTTP(ww, r)
 		})
+		handleMetricsAndLogs(r, requestInfo)
 	}
+	return http.HandlerFunc(fn)
 }
 
 func handleTraces(requestInfo *RequestInfo) func(next http.Handler) http.Handler {
@@ -94,7 +93,10 @@ func handleTraces(requestInfo *RequestInfo) func(next http.Handler) http.Handler
 				clientAddress, clientPortStr, _ := net.SplitHostPort(r.RemoteAddr)
 				serverPort := parsePort(serverPortStr)
 				clientPort := parsePort(clientPortStr)
-				route := chi.RouteContext(ctx).RoutePattern()
+				route := r.Pattern
+				if route == "" {
+					route = r.URL.Path
+				}
 
 				span.SetAttributes(semconv.HTTPRequestMethodKey.String(r.Method))
 				span.SetAttributes(semconv.HTTPRoute(route))
@@ -112,7 +114,7 @@ func handleTraces(requestInfo *RequestInfo) func(next http.Handler) http.Handler
 				span.SetAttributes(semconv.NetworkPeerPort(clientPort))
 				span.SetAttributes(attribute.Key(semconv.HTTPRequestBodySizeKey).Int64(r.ContentLength))
 
-				if requestId := middleware.GetReqID(ctx); requestId != "" {
+				if requestId := requestid.Get(ctx); requestId != "" {
 					span.SetAttributes(attribute.Key("http.request_id").String(requestId))
 				}
 
@@ -167,7 +169,11 @@ func handleMetricsAndLogs(r *http.Request, requestInfo *RequestInfo) {
 		clientAddress, clientPortStr, _ := net.SplitHostPort(r.RemoteAddr)
 		serverPort := parsePort(serverPortStr)
 		clientPort := parsePort(clientPortStr)
-		route := chi.RouteContext(ctx).RoutePattern()
+		route := r.Pattern
+		if route == "" {
+			route = r.URL.Path
+		}
+
 		status := requestInfo.Metrics.Code
 		duration := requestInfo.Metrics.Duration
 		written := requestInfo.Metrics.Written

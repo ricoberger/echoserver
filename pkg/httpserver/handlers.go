@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/render"
+	"github.com/ricoberger/echoserver/pkg/httpserver/middleware/requestid"
+
 	"github.com/gorilla/websocket"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -40,16 +40,16 @@ func echoHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	render.Status(r, http.StatusOK)
-	render.PlainText(w, r, string(dump))
+	w.WriteHeader(http.StatusOK)
+	w.Write(dump)
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	_, span := tracer.Start(r.Context(), "healthHandler")
 	defer span.End()
 
-	render.Status(r, http.StatusOK)
-	render.PlainText(w, r, "OK")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK"))
 }
 
 func panicHandler(w http.ResponseWriter, r *http.Request) {
@@ -80,8 +80,8 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 
 		status := randomStatusCodes[index.Int64()]
 
-		render.Status(r, status)
-		render.PlainText(w, r, http.StatusText(status))
+		w.WriteHeader(status)
+		w.Write([]byte(http.StatusText(status)))
 		return
 	}
 
@@ -95,8 +95,8 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	render.Status(r, status)
-	render.PlainText(w, r, http.StatusText(status))
+	w.WriteHeader(status)
+	w.Write([]byte(http.StatusText(status)))
 }
 
 func timeoutHandler(w http.ResponseWriter, r *http.Request) {
@@ -157,14 +157,14 @@ func timeoutHandler(w http.ResponseWriter, r *http.Request) {
 
 	select {
 	case <-ctx.Done():
-		render.Status(r, http.StatusBadRequest)
-		render.PlainText(w, r, http.StatusText(http.StatusBadRequest))
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(http.StatusText(http.StatusBadRequest)))
 		return
 	case <-time.After(timeout):
 	}
 
-	render.Status(r, http.StatusOK)
-	render.PlainText(w, r, http.StatusText(http.StatusOK))
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(http.StatusText(http.StatusOK)))
 }
 
 func headerSizeHandler(w http.ResponseWriter, r *http.Request) {
@@ -195,8 +195,8 @@ func headerSizeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Add("X-Header-Size", strings.Repeat("0", size))
-	render.Status(r, http.StatusOK)
-	render.PlainText(w, r, http.StatusText(http.StatusOK))
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(http.StatusText(http.StatusOK)))
 }
 
 var httpClient = &http.Client{
@@ -244,7 +244,7 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
-	if requestId := middleware.GetReqID(ctx); requestId != "" {
+	if requestId := requestid.Get(ctx); requestId != "" {
 		req.Header.Set("x-request-id", requestId)
 	}
 
@@ -270,8 +270,8 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	render.Status(r, resp.StatusCode)
-	render.PlainText(w, r, string(body))
+	w.WriteHeader(resp.StatusCode)
+	w.Write(body)
 }
 
 func fibonacci(n uint64) (*big.Int, *big.Int) {
@@ -318,8 +318,8 @@ func fibonacciHandler(w http.ResponseWriter, r *http.Request) {
 	res, _ := fibonacci(n)
 	span.AddEvent("Calculation completed")
 
-	render.Status(r, http.StatusOK)
-	render.PlainText(w, r, res.String())
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(res.String()))
 }
 
 var upgrader = websocket.Upgrader{}

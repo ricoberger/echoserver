@@ -10,10 +10,9 @@ import (
 	"time"
 
 	"github.com/ricoberger/echoserver/pkg/httpserver/middleware/instrument"
+	"github.com/ricoberger/echoserver/pkg/httpserver/middleware/requestid"
 
 	"github.com/felixge/fgprof"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel"
@@ -54,35 +53,33 @@ func (s *server) Stop() {
 }
 
 func New(config Config) Server {
-	router := chi.NewRouter()
-	router.Use(middleware.RequestID)
-	router.Use(instrument.Handler())
-	router.HandleFunc("/", echoHandler)
-	router.HandleFunc("/health", healthHandler)
-	router.HandleFunc("/panic", panicHandler)
-	router.HandleFunc("/status", statusHandler)
-	router.HandleFunc("/timeout", timeoutHandler)
-	router.HandleFunc("/headersize", headerSizeHandler)
-	router.HandleFunc("/request", requestHandler)
-	router.HandleFunc("/fibonacci", fibonacciHandler)
-	router.HandleFunc("/websocket", websocketHandler)
-	router.HandleFunc("/debug/pprof", pprof.Index)
-	router.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	router.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	router.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	router.Handle("/debug/pprof/allocs", pprof.Handler("allocs"))
-	router.Handle("/debug/pprof/block", pprof.Handler("block"))
-	router.Handle("/debug/pprof/goroutine", pprof.Handler("goroutine"))
-	router.Handle("/debug/pprof/heap", pprof.Handler("heap"))
-	router.Handle("/debug/pprof/mutex", pprof.Handler("mutex"))
-	router.Handle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
-	router.Handle("/debug/pprof/trace", pprof.Handler("trace"))
-	router.Handle("/debug/pprof/fgprof", fgprof.Handler())
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", echoHandler)
+	mux.HandleFunc("/health", healthHandler)
+	mux.HandleFunc("/panic", panicHandler)
+	mux.HandleFunc("/status", statusHandler)
+	mux.HandleFunc("/timeout", timeoutHandler)
+	mux.HandleFunc("/headersize", headerSizeHandler)
+	mux.HandleFunc("/request", requestHandler)
+	mux.HandleFunc("/fibonacci", fibonacciHandler)
+	mux.HandleFunc("/websocket", websocketHandler)
+	mux.HandleFunc("/debug/pprof", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.Handle("/debug/pprof/allocs", pprof.Handler("allocs"))
+	mux.Handle("/debug/pprof/block", pprof.Handler("block"))
+	mux.Handle("/debug/pprof/goroutine", pprof.Handler("goroutine"))
+	mux.Handle("/debug/pprof/heap", pprof.Handler("heap"))
+	mux.Handle("/debug/pprof/mutex", pprof.Handler("mutex"))
+	mux.Handle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
+	mux.Handle("/debug/pprof/trace", pprof.Handler("trace"))
+	mux.Handle("/debug/pprof/fgprof", fgprof.Handler())
 
 	if os.Getenv("OTEL_METRICS_EXPORTER") == "prometheus" {
 		// To view exemplars, the following cURL command can be used:
 		// curl -H 'Accept: application/openmetrics-text' 'http://localhost:8080/metrics'
-		router.Handle("/metrics", promhttp.InstrumentMetricHandler(
+		mux.Handle("/metrics", promhttp.InstrumentMetricHandler(
 			prometheus.DefaultRegisterer,
 			promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{EnableOpenMetrics: true}),
 		))
@@ -91,7 +88,7 @@ func New(config Config) Server {
 	return &server{
 		server: &http.Server{
 			Addr:              config.Address,
-			Handler:           router,
+			Handler:           requestid.Handler(instrument.Handler(mux)),
 			ReadHeaderTimeout: 5 * time.Second,
 		},
 	}
