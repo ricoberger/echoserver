@@ -18,7 +18,7 @@ import (
 	"google.golang.org/grpc"
 	grpccodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
-	rpb "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
+	rpb "google.golang.org/grpc/reflection/grpc_reflection_v1"
 	grpcstatus "google.golang.org/grpc/status"
 )
 
@@ -103,7 +103,7 @@ func (e *echoserver) Request(ctx context.Context, r *pb.RequestRequest) (*pb.Req
 	conn, _ := grpc.NewClient(r.GetUri(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 	defer conn.Close()
 
-	reflectionClient := grpcreflect.NewClientV1Alpha(ctx, rpb.NewServerReflectionClient(conn))
+	reflectionClient := grpcreflect.NewClientV1(ctx, rpb.NewServerReflectionClient(conn))
 	defer reflectionClient.Reset()
 
 	rf, formatter, err := grpcurl.RequestParserAndFormatter(
