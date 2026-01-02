@@ -14,5 +14,11 @@ spec:
       targetPort: http
       protocol: TCP
       name: http
+      appProtocol: http
+    - port: 8081
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+      appProtocol: grpc
   selector:
     {{- include "echoserver.selectorLabels" . | nindent 4 }}

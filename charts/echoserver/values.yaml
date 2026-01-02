@@ -94,6 +94,24 @@ volumes: []
 ##
 volumeMounts: []
 
+## Configure the liveness and readiness probes for the echoserver container.
+## See: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+##
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  # grpc:
+  #   port: 8081
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  # grpc:
+  #   port: 8081
+
+
 ## Specify additional environment variables for the echoserver container.
 ##
 env: []
