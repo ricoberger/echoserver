@@ -11,6 +11,7 @@ import (
 
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
+	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/peer"
 )
@@ -36,13 +37,13 @@ func (c *reporter) PostCall(err error, duration time.Duration) {
 	serverPort := parsePort(serverPortStr)
 
 	fields := []any{
-		slog.String("rpc_grpc_status_code", code.String()),
-		slog.String("rpc_method", c.Method),
-		slog.String("rpc_service", c.Service),
-		slog.String("rpc_system", "grpc"),
-		slog.String("server_address", serverAddress),
-		slog.Int("server_port", serverPort),
-		slog.Duration("duration", duration),
+		slog.String(string(semconv.RPCGRPCStatusCodeKey), code.String()),
+		slog.String(string(semconv.RPCMethodKey), c.Method),
+		slog.String(string(semconv.RPCServiceKey), c.Service),
+		slog.String(string(semconv.RPCSystemKey), "grpc"),
+		slog.String(string(semconv.ServerAddressKey), serverAddress),
+		slog.Int(string(semconv.ServerPortKey), serverPort),
+		slog.Duration("rpc.grpc.duration", duration),
 	}
 	if err != nil {
 		fields = append(fields, slog.Any("error", err))
