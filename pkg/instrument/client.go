@@ -134,7 +134,7 @@ func newLoggerProvider(ctx context.Context, defaultResource *resource.Resource) 
 
 		// Instead of the stdout exporter we use a simple slog logger for
 		// better readability.
-		setupConsoleLogger()
+		setupConsoleLogger(defaultResource)
 
 		lp := log.NewLoggerProvider()
 		lp.LoggerProvider = logNoop.NewLoggerProvider()

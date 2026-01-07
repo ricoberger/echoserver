@@ -66,8 +66,11 @@ export OTEL_RESOURCE_DETECTORS="container,host,os,process,sdk"
 # variables can be used to configure the logging output:
 # - LOG_FORMAT: Set the output format of the logs. Must be "console" or "json".
 # - LOG_LEVEL: Set the log level. Must be "DEBUG", "INFO", "WARN" or "ERROR".
+# - LOG_RESOURCE_ATTRIBUTES: Define if the resource attributes should be logged.
+#   Must be "true" or "false".
 export LOG_FORMAT="console"
 export LOG_LEVEL="INFO"
+export LOG_RESOURCE_ATTRIBUTES="true"
 ```
 
 ## Usage
