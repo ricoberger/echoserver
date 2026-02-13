@@ -8,6 +8,7 @@ import (
 	"net"
 
 	"github.com/ricoberger/echoserver/pkg/grpcserver/middleware/instrument"
+	"github.com/ricoberger/echoserver/pkg/grpcserver/middleware/requestid"
 	pb "github.com/ricoberger/echoserver/pkg/grpcserver/proto"
 
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -59,9 +60,11 @@ func New(config Config) Server {
 	grpcOptions := []grpc.ServerOption{
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(
+			requestid.UnaryServerInterceptor(),
 			instrument.UnaryServerInterceptor(),
 		),
 		grpc.ChainStreamInterceptor(
+			requestid.StreamServerInterceptor(),
 			instrument.StreamServerInterceptor(),
 		),
 	}
