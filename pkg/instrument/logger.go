@@ -54,7 +54,7 @@ type CustomHandler struct {
 
 func (h *CustomHandler) Handle(ctx context.Context, r slog.Record) error {
 	if requestId := requestid.Get(ctx); requestId != "" {
-		r.Add("http.request.id", slog.StringValue(requestId))
+		r.Add("http.request.header.x-request-id", slog.StringValue(requestId))
 	}
 
 	span := trace.SpanContextFromContext(ctx)
