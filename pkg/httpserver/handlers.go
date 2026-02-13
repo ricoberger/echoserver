@@ -243,7 +243,7 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 
 	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
 	if requestId := requestid.Get(ctx); requestId != "" {
-		req.Header.Set("x-request-id", requestId)
+		req.Header.Set(requestid.RequestIDHeader, requestId)
 	}
 
 	resp, err := httpClient.Do(req)

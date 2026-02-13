@@ -23,7 +23,7 @@ func Handler(next http.Handler) http.Handler {
 		ctx := r.Context()
 
 		span := trace.SpanFromContext(ctx)
-		span.SetAttributes(attribute.String("http.request.id", requestid.Get(ctx)))
+		span.SetAttributes(attribute.String("http.request.header.x-request-id", requestid.Get(ctx)))
 
 		scheme := "http"
 		if r.TLS != nil {
