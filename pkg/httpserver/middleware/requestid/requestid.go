@@ -15,7 +15,7 @@ type ctxKeyRequestID int
 
 const RequestIDKey ctxKeyRequestID = 0
 
-var RequestIDHeader = "X-Request-Id"
+var RequestIDHeader = "x-request-id"
 
 var prefix string
 var reqid uint64

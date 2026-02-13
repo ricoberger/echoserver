@@ -194,6 +194,7 @@ type RequestRequest struct {
 	Uri           string                 `protobuf:"bytes,1,opt,name=uri,proto3" json:"uri,omitempty"`
 	Method        string                 `protobuf:"bytes,2,opt,name=method,proto3" json:"method,omitempty"`
 	Message       string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
+	Headers       map[string]string      `protobuf:"bytes,4,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -247,6 +248,13 @@ func (x *RequestRequest) GetMessage() string {
 		return x.Message
 	}
 	return ""
+}
+
+func (x *RequestRequest) GetHeaders() map[string]string {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
 }
 
 type RequestResponse struct {
@@ -304,11 +312,15 @@ const file_proto_echoserver_proto_rawDesc = "" +
 	"\amessage\x18\x01 \x01(\tR\amessage\"'\n" +
 	"\rStatusRequest\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\"\x10\n" +
-	"\x0eStatusResponse\"T\n" +
+	"\x0eStatusResponse\"\xc8\x01\n" +
 	"\x0eRequestRequest\x12\x10\n" +
 	"\x03uri\x18\x01 \x01(\tR\x03uri\x12\x16\n" +
 	"\x06method\x18\x02 \x01(\tR\x06method\x12\x18\n" +
-	"\amessage\x18\x03 \x01(\tR\amessage\"+\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage\x126\n" +
+	"\aheaders\x18\x04 \x03(\v2\x1c.RequestRequest.HeadersEntryR\aheaders\x1a:\n" +
+	"\fHeadersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"+\n" +
 	"\x0fRequestResponse\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage2\x90\x01\n" +
 	"\n" +
@@ -329,7 +341,7 @@ func file_proto_echoserver_proto_rawDescGZIP() []byte {
 	return file_proto_echoserver_proto_rawDescData
 }
 
-var file_proto_echoserver_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_proto_echoserver_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_proto_echoserver_proto_goTypes = []any{
 	(*EchoRequest)(nil),     // 0: EchoRequest
 	(*EchoResponse)(nil),    // 1: EchoResponse
@@ -337,19 +349,21 @@ var file_proto_echoserver_proto_goTypes = []any{
 	(*StatusResponse)(nil),  // 3: StatusResponse
 	(*RequestRequest)(nil),  // 4: RequestRequest
 	(*RequestResponse)(nil), // 5: RequestResponse
+	nil,                     // 6: RequestRequest.HeadersEntry
 }
 var file_proto_echoserver_proto_depIdxs = []int32{
-	0, // 0: Echoserver.Echo:input_type -> EchoRequest
-	2, // 1: Echoserver.Status:input_type -> StatusRequest
-	4, // 2: Echoserver.Request:input_type -> RequestRequest
-	1, // 3: Echoserver.Echo:output_type -> EchoResponse
-	3, // 4: Echoserver.Status:output_type -> StatusResponse
-	5, // 5: Echoserver.Request:output_type -> RequestResponse
-	3, // [3:6] is the sub-list for method output_type
-	0, // [0:3] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	6, // 0: RequestRequest.headers:type_name -> RequestRequest.HeadersEntry
+	0, // 1: Echoserver.Echo:input_type -> EchoRequest
+	2, // 2: Echoserver.Status:input_type -> StatusRequest
+	4, // 3: Echoserver.Request:input_type -> RequestRequest
+	1, // 4: Echoserver.Echo:output_type -> EchoResponse
+	3, // 5: Echoserver.Status:output_type -> StatusResponse
+	5, // 6: Echoserver.Request:output_type -> RequestResponse
+	4, // [4:7] is the sub-list for method output_type
+	1, // [1:4] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_proto_echoserver_proto_init() }
@@ -363,7 +377,7 @@ func file_proto_echoserver_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_echoserver_proto_rawDesc), len(file_proto_echoserver_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -5,7 +5,8 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/ricoberger/echoserver/pkg/httpserver/middleware/requestid"
+	grpcrequestid "github.com/ricoberger/echoserver/pkg/grpcserver/middleware/requestid"
+	httprequestid "github.com/ricoberger/echoserver/pkg/httpserver/middleware/requestid"
 
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/trace"
@@ -53,8 +54,11 @@ type CustomHandler struct {
 }
 
 func (h *CustomHandler) Handle(ctx context.Context, r slog.Record) error {
-	if requestId := requestid.Get(ctx); requestId != "" {
+	if requestId := httprequestid.Get(ctx); requestId != "" {
 		r.Add("http.request.header.x-request-id", slog.StringValue(requestId))
+	}
+	if requestId := grpcrequestid.Get(ctx); requestId != "" {
+		r.Add("rpc.request.metadata.x-request-id", slog.StringValue(requestId))
 	}
 
 	span := trace.SpanContextFromContext(ctx)

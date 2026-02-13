@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"fmt"
 	"log/slog"
 	"math/big"
 	"strings"
 
+	"github.com/ricoberger/echoserver/pkg/grpcserver/middleware/requestid"
 	pb "github.com/ricoberger/echoserver/pkg/grpcserver/proto"
 
 	"github.com/fullstorydev/grpcurl"
@@ -18,6 +20,7 @@ import (
 	"google.golang.org/grpc"
 	grpccodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	rpb "google.golang.org/grpc/reflection/grpc_reflection_v1"
 	grpcstatus "google.golang.org/grpc/status"
 )
@@ -126,12 +129,26 @@ func (e *echoserver) Request(ctx context.Context, r *pb.RequestRequest) (*pb.Req
 		Status:         &status,
 	}
 
+	var headers []string
+	for key, value := range r.GetHeaders() {
+		headers = append(headers, fmt.Sprintf("%s: %s", key, value))
+	}
+	if requestId := requestid.Get(ctx); requestId != "" {
+		headers = append(headers, fmt.Sprintf("%s: %s", requestid.RequestIDHeader, requestId))
+	}
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		requestIds := md.Get(requestid.RequestIDHeader)
+		if len(requestIds) > 0 {
+			headers = append(headers, fmt.Sprintf("%s: %s", requestid.RequestIDHeader, requestIds[0]))
+		}
+	}
+
 	err = grpcurl.InvokeRPC(
 		ctx,
 		grpcurl.DescriptorSourceFromServer(ctx, reflectionClient),
 		conn,
 		r.GetMethod(),
-		[]string{},
+		headers,
 		h,
 		rf.Next,
 	)

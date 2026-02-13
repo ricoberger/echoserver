@@ -28,6 +28,7 @@ message RequestRequest {
   string uri = 1;
   string method = 2;
   string message = 3;
+  map<string, string> headers = 4;
 }
 
 message RequestResponse {
