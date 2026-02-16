@@ -55,7 +55,7 @@ func Handler(next http.Handler) http.Handler {
 			slog.Int(string(semconv.NetworkPeerPortKey), clientPort),
 			slog.Int64(string(semconv.HTTPRequestBodySizeKey), r.ContentLength),
 			slog.Int64(string(semconv.HTTPResponseBodySizeKey), m.Written),
-			slog.Duration("http.request.duration", m.Duration),
+			slog.Float64("http.request.duration", m.Duration.Seconds()),
 		)
 	}
 

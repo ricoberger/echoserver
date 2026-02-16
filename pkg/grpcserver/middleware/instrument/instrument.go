@@ -43,7 +43,7 @@ func (c *reporter) PostCall(err error, duration time.Duration) {
 		slog.String(string(semconv.RPCSystemKey), "grpc"),
 		slog.String(string(semconv.ServerAddressKey), serverAddress),
 		slog.Int(string(semconv.ServerPortKey), serverPort),
-		slog.Duration("rpc.grpc.duration", duration),
+		slog.Float64("rpc.grpc.duration", duration.Seconds()),
 	}
 	if err != nil {
 		fields = append(fields, slog.Any("error", err))
