@@ -20,7 +20,7 @@ Via Docker the following commands can be used to build the image and run the
 
 ```sh
 docker build -f ./cmd/echoserver/Dockerfile -t ghcr.io/ricoberger/echoserver:latest .
-docker run -it --rm --name echoserver -p 8080:8080 ghcr.io/ricoberger/echoserver:latest
+docker run -it --rm --name echoserver -p 8080:8080 -p 8081:8081 ghcr.io/ricoberger/echoserver:latest
 ```
 
 The `echoserver` can also be deployed on Kubernetes via Helm:
@@ -37,6 +37,7 @@ Usage: echoserver [flags]
 Flags:
   -h, --help                           Show context-sensitive help.
       --http-server.address=":8080"    The address where the server should listen on ($HTTP_SERVER_ADDRESS).
+      --grpc-server.address=":8081"    The address where the gRPC server should listen on ($GRPC_SERVER_ADDRESS).
 ```
 
 ```sh
