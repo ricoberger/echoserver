@@ -1,7 +1,6 @@
 package httpserver
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
@@ -9,7 +8,6 @@ import (
 	"log/slog"
 	"math/big"
 	"net/http"
-	"net/http/httptrace"
 	"net/http/httputil"
 	"strconv"
 	"strings"
@@ -18,8 +16,6 @@ import (
 	"github.com/ricoberger/echoserver/pkg/httpserver/middleware/requestid"
 
 	"github.com/gorilla/websocket"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -197,20 +193,12 @@ func headerSizeHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(http.StatusText(http.StatusOK)))
 }
 
-var httpClient = &http.Client{
-	Transport: otelhttp.NewTransport(
-		http.DefaultTransport,
-		otelhttp.WithClientTrace(func(ctx context.Context) *httptrace.ClientTrace {
-			return otelhttptrace.NewClientTrace(ctx, otelhttptrace.WithoutSubSpans())
-		}),
-	),
-}
-
 type Request struct {
-	Method  string            `json:"method"`
-	URL     string            `json:"url"`
-	Body    string            `json:"body"`
-	Headers map[string]string `json:"headers"`
+	Method            string             `json:"method"`
+	URL               string             `json:"url"`
+	Body              string             `json:"body"`
+	Headers           map[string]string  `json:"headers"`
+	HTTPClientOptions *HTTPClientOptions `json:"httpClientOptions"`
 }
 
 func requestHandler(w http.ResponseWriter, r *http.Request) {
@@ -246,7 +234,7 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 		req.Header.Set(requestid.RequestIDHeader, requestId)
 	}
 
-	resp, err := httpClient.Do(req)
+	resp, err := getHTTPClient(request.HTTPClientOptions).Do(req)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to do http request.", slog.Any("error", err))
 		span.RecordError(err)
