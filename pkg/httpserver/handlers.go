@@ -59,6 +59,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, span := tracer.Start(r.Context(), "statusHandler")
 	defer span.End()
 	span.SetAttributes(attribute.Key("http.parameter.status").String(r.URL.Query().Get("status")))
+	slog.DebugContext(ctx, "Handling status request.", slog.String("status", r.URL.Query().Get("status")))
 
 	randomStatusCodes := []int{200, 200, 200, 200, 200, 400, 500, 502, 503}
 
@@ -100,6 +101,7 @@ func timeoutHandler(w http.ResponseWriter, r *http.Request) {
 	defer span.End()
 	span.SetAttributes(attribute.Key("http.parameter.timeout").String(r.URL.Query().Get("timeout")))
 	span.SetAttributes(attribute.Key("http.parameter.flush").String(r.URL.Query().Get("flush")))
+	slog.DebugContext(ctx, "Handling timeout request.", slog.String("timeout", r.URL.Query().Get("timeout")), slog.String("flush", r.URL.Query().Get("flush")))
 
 	timeoutString := r.URL.Query().Get("timeout")
 	if timeoutString == "" {
@@ -165,6 +167,7 @@ func headerSizeHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, span := tracer.Start(r.Context(), "headerSizeHandler")
 	defer span.End()
 	span.SetAttributes(attribute.Key("http.parameter.size").String(r.URL.Query().Get("size")))
+	slog.DebugContext(ctx, "Handling header size request.", slog.String("size", r.URL.Query().Get("size")))
 
 	headerSizeString := r.URL.Query().Get("size")
 	if headerSizeString == "" {
@@ -214,6 +217,11 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	span.SetAttributes(attribute.Key("http.parameter.method").String(request.Method))
+	span.SetAttributes(attribute.Key("http.parameter.url").String(request.URL))
+	span.SetAttributes(attribute.Key("http.parameter.body").String(request.Body))
+	slog.DebugContext(ctx, "Handling request request.", slog.String("method", request.Method), slog.String("url", request.URL), slog.String("body", request.Body))
 
 	req, err := http.NewRequestWithContext(ctx, request.Method, request.URL, strings.NewReader(request.Body))
 	if err != nil {
@@ -277,6 +285,7 @@ func fibonacciHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, span := tracer.Start(r.Context(), "fibonacciHandler")
 	defer span.End()
 	span.SetAttributes(attribute.Key("http.parameter.n").String(r.URL.Query().Get("n")))
+	slog.DebugContext(ctx, "Handling fibonacci request.", slog.String("n", r.URL.Query().Get("n")))
 
 	nString := r.URL.Query().Get("n")
 	if nString == "" {
