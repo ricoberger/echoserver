@@ -41,6 +41,7 @@ func (e *echoserver) Echo(ctx context.Context, r *pb.EchoRequest) (*pb.EchoRespo
 	_, span := tracer.Start(ctx, "Echo")
 	defer span.End()
 	span.SetAttributes(attribute.Key("message").String(r.GetMessage()))
+	slog.DebugContext(ctx, "Echo request received.", slog.String("message", r.GetMessage()))
 
 	return &pb.EchoResponse{
 		Message: r.GetMessage(),
@@ -51,6 +52,7 @@ func (e *echoserver) Status(ctx context.Context, r *pb.StatusRequest) (*pb.Statu
 	_, span := tracer.Start(ctx, "Status")
 	defer span.End()
 	span.SetAttributes(attribute.Key("status").String(r.GetStatus()))
+	slog.DebugContext(ctx, "Status request received.", slog.String("status", r.GetStatus()))
 
 	randomStatusCodes := []grpccodes.Code{grpccodes.OK, grpccodes.OK, grpccodes.OK, grpccodes.OK, grpccodes.OK, grpccodes.InvalidArgument, grpccodes.NotFound, grpccodes.Internal, grpccodes.Unavailable}
 
@@ -102,6 +104,7 @@ func (e *echoserver) Request(ctx context.Context, r *pb.RequestRequest) (*pb.Req
 	span.SetAttributes(attribute.Key("uri").String(r.GetUri()))
 	span.SetAttributes(attribute.Key("method").String(r.GetMethod()))
 	span.SetAttributes(attribute.Key("message").String(r.GetMessage()))
+	slog.DebugContext(ctx, "Request request received.", slog.String("uri", r.GetUri()), slog.String("method", r.GetMethod()), slog.String("message", r.GetMessage()))
 
 	conn, _ := grpc.NewClient(r.GetUri(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 	defer conn.Close()
