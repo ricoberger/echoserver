@@ -37,7 +37,7 @@ func Handler(next http.Handler) http.Handler {
 
 		slog.InfoContext(
 			ctx,
-			"Request completed.",
+			fmt.Sprintf("http.request.method=%s http.response.status_code=%d url.full=%s", r.Method, m.Code, r.URL.String()),
 			slog.Int(string(semconv.HTTPResponseStatusCodeKey), m.Code),
 			slog.String(string(semconv.HTTPRequestMethodKey), r.Method),
 			slog.String(string(semconv.HTTPRouteKey), route),
