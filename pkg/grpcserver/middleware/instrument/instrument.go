@@ -3,6 +3,7 @@ package instrument
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -49,7 +50,7 @@ func (c *reporter) PostCall(err error, duration time.Duration) {
 		fields = append(fields, slog.Any("error", err))
 	}
 
-	slog.InfoContext(c.ctx, "Call completed.", fields...)
+	slog.InfoContext(c.ctx, fmt.Sprintf("rpc.grpc.status_code=%s rpc.method=%s rpc.service=%s", code.String(), c.Method, c.Service), fields...)
 }
 
 func (c *reporter) PostMsgSend(payload any, err error, duration time.Duration) {
