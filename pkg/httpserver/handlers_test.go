@@ -248,10 +248,10 @@ func TestWebsocketHandler(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(websocketHandler))
 		defer server.Close()
 
-		//nolint:bodyclose
-		client, _, err := websocket.DefaultDialer.Dial(fmt.Sprintf("ws%s", strings.TrimPrefix(server.URL, "http")), nil)
+		client, resp, err := websocket.DefaultDialer.Dial(fmt.Sprintf("ws%s", strings.TrimPrefix(server.URL, "http")), nil)
 		require.NoError(t, err)
 		defer client.Close()
+		defer resp.Body.Close()
 
 		message := []byte("test")
 		err = client.WriteMessage(websocket.TextMessage, message)
