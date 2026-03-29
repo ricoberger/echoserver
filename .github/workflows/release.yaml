@@ -6,13 +6,12 @@ on:
     tags:
       - v*
 
-permissions:
-  contents: read
-
 jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Release
         uses: softprops/action-gh-release@v2
