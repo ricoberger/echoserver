@@ -11,6 +11,7 @@ import (
 	"github.com/ricoberger/echoserver/pkg/httpserver/middleware/requestid"
 
 	"github.com/felixge/httpsnoop"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/attribute"
 	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 	"go.opentelemetry.io/otel/trace"
@@ -21,6 +22,9 @@ func Handler(next http.Handler) http.Handler {
 		m := httpsnoop.CaptureMetrics(next, w, r)
 
 		ctx := r.Context()
+		if labeler, ok := otelhttp.LabelerFromContext(ctx); ok {
+			labeler.Add(semconv.HTTPRoute(GetRoute(r)))
+		}
 
 		span := trace.SpanFromContext(ctx)
 		span.SetAttributes(attribute.String("http.request.header.x-request-id", requestid.Get(ctx)))

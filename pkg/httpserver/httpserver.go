@@ -19,8 +19,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 )
 
 var (
@@ -93,18 +91,17 @@ func New(config Config) Server {
 	return &server{
 		server: &http.Server{
 			Addr: config.Address,
-			Handler: requestid.Handler(otelhttp.NewHandler(instrument.Handler(recoverer.Handler(mux)), "",
-				otelhttp.WithMessageEvents(otelhttp.ReadEvents, otelhttp.WriteEvents),
-				otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
-					route := instrument.GetRoute(r)
-					return fmt.Sprintf("%s:%s", r.Method, route)
-				}),
-				otelhttp.WithMetricAttributesFn(func(r *http.Request) []attribute.KeyValue {
-					return []attribute.KeyValue{
-						semconv.HTTPRoute(instrument.GetRoute(r)),
-					}
-				}),
-			)),
+			Handler: requestid.Handler(
+				otelhttp.NewHandler(
+					instrument.Handler(recoverer.Handler(mux)),
+					"",
+					otelhttp.WithMessageEvents(otelhttp.ReadEvents, otelhttp.WriteEvents),
+					otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
+						route := instrument.GetRoute(r)
+						return fmt.Sprintf("%s:%s", r.Method, route)
+					}),
+				),
+			),
 			ReadHeaderTimeout: 5 * time.Second,
 		},
 	}
