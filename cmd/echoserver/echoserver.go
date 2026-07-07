@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 
 	"github.com/ricoberger/echoserver/pkg/grpcserver"
@@ -29,6 +30,9 @@ func main() {
 }
 
 func (c *Cli) run() error {
+	runtime.SetMutexProfileFraction(5)
+	runtime.SetBlockProfileRate(5)
+
 	instrumentClient, err := instrument.New(context.Background())
 	if err != nil {
 		return err
