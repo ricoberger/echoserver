@@ -4,7 +4,7 @@ go 1.26.2
 
 require (
 	github.com/alecthomas/kong v1.15.0
-	github.com/felixge/httpsnoop v1.0.5-0.20250604085516-9a9390b3efa8
+	github.com/felixge/httpsnoop v1.1.0
 	github.com/fullstorydev/grpcurl v1.9.3
 	github.com/gorilla/websocket v1.5.3
 	github.com/grafana/otel-profiling-go v0.6.0
@@ -31,7 +31,7 @@ require (
 	go.opentelemetry.io/otel/sdk/log v0.20.0
 	go.opentelemetry.io/otel/sdk/metric v1.44.0
 	go.opentelemetry.io/otel/trace v1.44.0
-	google.golang.org/grpc v1.81.1
+	google.golang.org/grpc v1.82.0
 	google.golang.org/protobuf v1.36.11
 )
 
