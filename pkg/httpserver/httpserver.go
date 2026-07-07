@@ -14,7 +14,6 @@ import (
 	"github.com/ricoberger/echoserver/pkg/httpserver/middleware/recoverer"
 	"github.com/ricoberger/echoserver/pkg/httpserver/middleware/requestid"
 
-	"github.com/felixge/fgprof"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -77,7 +76,6 @@ func New(config Config) Server {
 	mux.Handle("/debug/pprof/mutex", pprof.Handler("mutex"))
 	mux.Handle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
 	mux.Handle("/debug/pprof/trace", pprof.Handler("trace"))
-	mux.Handle("/debug/pprof/fgprof", fgprof.Handler())
 
 	if os.Getenv("OTEL_METRICS_EXPORTER") == "prometheus" {
 		// To view exemplars, the following cURL command can be used:

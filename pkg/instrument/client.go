@@ -9,6 +9,8 @@ import (
 
 	"github.com/ricoberger/echoserver/pkg/version"
 
+	otelpyroscope "github.com/grafana/otel-profiling-go"
+	"github.com/grafana/pyroscope-go"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/propagators/b3"
 	"go.opentelemetry.io/otel"
@@ -35,9 +37,10 @@ type Client interface {
 }
 
 type client struct {
-	loggerProvider *log.LoggerProvider
-	meterProvider  *metric.MeterProvider
-	tracerProvider *trace.TracerProvider
+	loggerProvider  *log.LoggerProvider
+	meterProvider   *metric.MeterProvider
+	tracerProvider  *trace.TracerProvider
+	profileProvider *pyroscope.Profiler
 }
 
 func (c *client) Shutdown() {
@@ -52,6 +55,13 @@ func (c *client) Shutdown() {
 	err = c.tracerProvider.Shutdown(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "Graceful shutdown of the tracer provider failed.", slog.Any("error", err))
+	}
+
+	if c.profileProvider != nil {
+		err = c.profileProvider.Stop()
+		if err != nil {
+			slog.ErrorContext(ctx, "Graceful shutdown of the profile provider failed.", slog.Any("error", err))
+		}
 	}
 }
 
@@ -83,12 +93,18 @@ func New(ctx context.Context) (Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	otel.SetTracerProvider(tracerProvider)
+	otel.SetTracerProvider(otelpyroscope.NewTracerProvider(tracerProvider))
+
+	profileProvider, err := newProfileProvider(defaultResource)
+	if err != nil {
+		return nil, err
+	}
 
 	return &client{
-		loggerProvider: loggerProvider,
-		meterProvider:  meterProvider,
-		tracerProvider: tracerProvider,
+		loggerProvider:  loggerProvider,
+		meterProvider:   meterProvider,
+		tracerProvider:  tracerProvider,
+		profileProvider: profileProvider,
 	}, nil
 }
 
@@ -236,5 +252,38 @@ func newTracerProvider(ctx context.Context, defaultResource *resource.Resource) 
 		tp := trace.NewTracerProvider()
 		tp.TracerProvider = traceNoop.NewTracerProvider()
 		return tp, nil
+	}
+}
+
+func newProfileProvider(defaultResource *resource.Resource) (*pyroscope.Profiler, error) {
+	switch os.Getenv("OTEL_PROFILES_EXPORTER") {
+	case "pyroscope":
+		tags := make(map[string]string)
+		for _, attribute := range defaultResource.Attributes() {
+			tags[string(attribute.Key)] = attribute.Value.AsString()
+		}
+
+		return pyroscope.Start(pyroscope.Config{
+			ApplicationName: "echoserver",
+			Tags:            tags,
+			ServerAddress:   os.Getenv("PYROSCOPE_SERVER_ADDRESS"),
+			Logger:          newPyroscopeLogger(),
+			ProfileTypes: []pyroscope.ProfileType{
+				pyroscope.ProfileCPU,
+				pyroscope.ProfileInuseObjects,
+				pyroscope.ProfileAllocObjects,
+				pyroscope.ProfileInuseSpace,
+				pyroscope.ProfileAllocSpace,
+				pyroscope.ProfileGoroutines,
+				pyroscope.ProfileMutexCount,
+				pyroscope.ProfileMutexDuration,
+				pyroscope.ProfileBlockCount,
+				pyroscope.ProfileBlockDuration,
+				// Requires Go 1.26+ and GOEXPERIMENT=goroutineleakprofile
+				// pyroscope.ProfileGoroutineLeak,
+			},
+		})
+	default:
+		return nil, nil
 	}
 }

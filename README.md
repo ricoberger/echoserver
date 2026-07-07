@@ -55,6 +55,9 @@ export OTEL_METRICS_EXPORTER="console"
 # Set the traces exporter which should be used. Valid values are "console",
 # "otlp" and "none". The default value is "none".
 export OTEL_TRACES_EXPORTER="console"
+# Set the profiles exporter which should be used. The only valid value is
+# "pyroscope".
+export OTEL_PROFILES_EXPORTER=""
 # Key-value pairs to be used as resource attributes. This can be used to
 # overwrite the default service name / version and to set additional attributes,
 # like the Kubernetes Pod name, etc.
@@ -72,6 +75,10 @@ export OTEL_RESOURCE_DETECTORS="container,host,os,process,sdk"
 export LOG_FORMAT="console"
 export LOG_LEVEL="INFO"
 export LOG_RESOURCE_ATTRIBUTES="true"
+
+# When "OTEL_PROFILES_EXPORTER" is set to "pyroscope", the following environment
+# variables are required:
+# - PYROSCOPE_SERVER_ADDRESS: The address of the Pyroscope server.
 ```
 
 ## Usage
