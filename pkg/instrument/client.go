@@ -52,6 +52,11 @@ func (c *client) Shutdown() {
 		slog.ErrorContext(ctx, "Graceful shutdown of the logger provider failed.", slog.Any("error", err))
 	}
 
+	err = c.meterProvider.Shutdown(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "Graceful shutdown of the meter provider failed.", slog.Any("error", err))
+	}
+
 	err = c.tracerProvider.Shutdown(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "Graceful shutdown of the tracer provider failed.", slog.Any("error", err))
@@ -72,7 +77,7 @@ func New(ctx context.Context) (Client, error) {
 		b3.New(b3.WithInjectEncoding(b3.B3MultipleHeader|b3.B3SingleHeader)),
 	))
 
-	defaultResource, err := newReource(ctx)
+	defaultResource, err := newResource(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +113,7 @@ func New(ctx context.Context) (Client, error) {
 	}, nil
 }
 
-func newReource(ctx context.Context) (*resource.Resource, error) {
+func newResource(ctx context.Context) (*resource.Resource, error) {
 	options := []resource.Option{
 		resource.WithAttributes(attribute.Key("service.name").String("echoserver")),
 		resource.WithAttributes(attribute.Key("service.version").String(version.Version)),
@@ -210,6 +215,9 @@ func newMeterProvider(ctx context.Context, defaultResource *resource.Resource) (
 	case "prometheus":
 		var resourceAttributes []attribute.Key
 		for value := range strings.SplitSeq(os.Getenv("PROMETHEUS_RESOURCE_ATTRIBUTES"), ",") {
+			if value == "" {
+				continue
+			}
 			resourceAttributes = append(resourceAttributes, attribute.Key(value))
 		}
 

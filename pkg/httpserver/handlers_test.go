@@ -109,6 +109,17 @@ func TestStatusHandler(t *testing.T) {
 
 		require.Equal(t, http.StatusBadRequest, w.Code)
 	})
+
+	t.Run("should return error for out of range status code", func(t *testing.T) {
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/?status=99", nil)
+		w := httptest.NewRecorder()
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/", statusHandler)
+		mux.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
 }
 
 func TestTimeouthandler(t *testing.T) {
@@ -152,6 +163,17 @@ func TestTimeouthandler(t *testing.T) {
 
 	t.Run("should return error when timeout parameter is invalid", func(t *testing.T) {
 		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/?timeout=invalid", nil)
+		w := httptest.NewRecorder()
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/", timeoutHandler)
+		mux.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("should return error when flush parameter is invalid", func(t *testing.T) {
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/?timeout=1s&flush=invalid", nil)
 		w := httptest.NewRecorder()
 
 		mux := http.NewServeMux()
@@ -249,6 +271,17 @@ func TestRequest(t *testing.T) {
 		mux.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("should return bad gateway when request target is unreachable", func(t *testing.T) {
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, "/", strings.NewReader(`{"method":"GET","url":"http://127.0.0.1:1"}`))
+		w := httptest.NewRecorder()
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/", requestHandler)
+		mux.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadGateway, w.Code)
 	})
 }
 

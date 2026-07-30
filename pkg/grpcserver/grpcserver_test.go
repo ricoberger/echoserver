@@ -16,4 +16,13 @@ func TestServer(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 		server.Stop()
 	})
+
+	t.Run("should return without panic when the listener can not be created", func(t *testing.T) {
+		server := New(Config{Address: "invalid-address"})
+		require.NotNil(t, server)
+
+		require.NotPanics(t, func() {
+			server.Start()
+		})
+	})
 }

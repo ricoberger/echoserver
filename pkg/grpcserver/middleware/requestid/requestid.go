@@ -2,12 +2,8 @@ package requestid
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
-	"fmt"
-	"os"
-	"strings"
-	"sync/atomic"
+
+	id "github.com/ricoberger/echoserver/pkg/requestid"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -17,26 +13,7 @@ type ctxKeyRequestID int
 
 const RequestIDKey ctxKeyRequestID = 0
 
-var RequestIDHeader = "x-request-id"
-
-var prefix string
-var reqid uint64
-
-func init() {
-	hostname, err := os.Hostname()
-	if hostname == "" || err != nil {
-		hostname = "localhost"
-	}
-	var buf [12]byte
-	var b64 string
-	for len(b64) < 10 {
-		rand.Read(buf[:])
-		b64 = base64.StdEncoding.EncodeToString(buf[:])
-		b64 = strings.NewReplacer("+", "", "/", "").Replace(b64)
-	}
-
-	prefix = fmt.Sprintf("%s/%s", hostname, b64[0:10])
-}
+const RequestIDHeader = id.Header
 
 func UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
@@ -47,8 +24,7 @@ func UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 			}
 		}
 		if requestID == "" {
-			myid := atomic.AddUint64(&reqid, 1)
-			requestID = fmt.Sprintf("%s-%06d", prefix, myid)
+			requestID = id.Generate()
 		}
 		ctx = context.WithValue(ctx, RequestIDKey, requestID)
 		return handler(ctx, req)
@@ -65,8 +41,7 @@ func StreamServerInterceptor() grpc.StreamServerInterceptor {
 			}
 		}
 		if requestID == "" {
-			myid := atomic.AddUint64(&reqid, 1)
-			requestID = fmt.Sprintf("%s-%06d", prefix, myid)
+			requestID = id.Generate()
 		}
 		ctx = context.WithValue(ctx, RequestIDKey, requestID)
 		wrapped := &wrappedServerStream{

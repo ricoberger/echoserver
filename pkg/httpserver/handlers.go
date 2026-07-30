@@ -34,6 +34,8 @@ func echoHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
+	// Echoing the request back is the purpose of this endpoint, so the
+	// reflected content is intended.
 	//nolint:gosec
 	w.Write(dump)
 }
@@ -82,6 +84,11 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if status < 100 || status > 999 {
+		handleError(ctx, w, span, http.StatusBadRequest, "Invalid 'status' parameter.", fmt.Errorf("status parameter must be a valid http status code (100-999)"))
+		return
+	}
+
 	w.WriteHeader(status)
 	w.Write([]byte(http.StatusText(status)))
 }
@@ -99,41 +106,56 @@ func timeoutHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// stopFlush stops the flush goroutine and waits until it has returned, so
+	// it can not write to the response concurrently with the final writes
+	// below.
+	stopFlush := func() {}
+
 	if flushString := r.URL.Query().Get("flush"); flushString != "" {
-		if flush, err := time.ParseDuration(flushString); err == nil && flush > 0 {
-			done := make(chan bool)
+		flush, err := time.ParseDuration(flushString)
+		if err != nil || flush <= 0 {
+			if err == nil {
+				err = fmt.Errorf("flush parameter must be a positive duration")
+			}
+			handleError(ctx, w, span, http.StatusBadRequest, "Invalid 'flush' parameter.", err)
+			return
+		}
 
-			go func() {
-				ticker := time.NewTicker(flush)
-				defer ticker.Stop()
+		done := make(chan bool)
 
-				for {
-					select {
-					case <-done:
-						return
-					case <-ticker.C:
-						if f, ok := w.(http.Flusher); ok {
-							span.AddEvent("Flush")
-							w.Write([]byte(http.StatusText(http.StatusProcessing) + "\n"))
-							f.Flush()
-						}
+		go func() {
+			ticker := time.NewTicker(flush)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-done:
+					return
+				case <-ticker.C:
+					if f, ok := w.(http.Flusher); ok {
+						span.AddEvent("Flush")
+						w.Write([]byte(http.StatusText(http.StatusProcessing) + "\n"))
+						f.Flush()
 					}
 				}
-			}()
+			}
+		}()
 
-			defer func() {
-				done <- true
-			}()
+		stopFlush = func() {
+			done <- true
 		}
 	}
 
 	select {
 	case <-ctx.Done():
-		w.Write([]byte(http.StatusText(http.StatusBadRequest)))
+		// The client canceled the request or the server is shutting down, so
+		// there is no point in writing a response.
+		stopFlush()
 		return
 	case <-time.After(timeout):
 	}
 
+	stopFlush()
 	w.Write([]byte(http.StatusText(http.StatusOK)))
 }
 
@@ -194,7 +216,7 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := getHTTPClient(request.HTTPClientOptions).Do(req)
 	if err != nil {
-		handleError(ctx, w, span, http.StatusBadRequest, "Failed to do http request.", err)
+		handleError(ctx, w, span, http.StatusBadGateway, "Failed to do http request.", err)
 		return
 	}
 
@@ -202,7 +224,7 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		handleError(ctx, w, span, http.StatusBadRequest, "Failed to read response body.", err)
+		handleError(ctx, w, span, http.StatusBadGateway, "Failed to read response body.", err)
 		return
 	}
 

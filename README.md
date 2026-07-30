@@ -1,7 +1,7 @@
 # echoserver
 
 The `echoserver` is a HTTP / gRPC server written in Go, which was mainly written
-to dump HTTP requests. Nowdays it can also be used to test / showcase the
+to dump HTTP requests. Nowadays it can also be used to test / showcase the
 instrumentation of a Go application with metrics, logs, traces and profiles. It
 can also be used to test the timeout / header size configuration of a reverse
 proxy.
@@ -31,12 +31,12 @@ helm upgrade --install echoserver oci://ghcr.io/ricoberger/charts/echoserver --v
 
 ## Configuration
 
-```plantext
+```plaintext
 Usage: echoserver [flags]
 
 Flags:
   -h, --help                           Show context-sensitive help.
-      --http-server.address=":8080"    The address where the server should listen on ($HTTP_SERVER_ADDRESS).
+      --http-server.address=":8080"    The address where the HTTP server should listen on ($HTTP_SERVER_ADDRESS).
       --grpc-server.address=":8081"    The address where the gRPC server should listen on ($GRPC_SERVER_ADDRESS).
 ```
 
@@ -96,7 +96,8 @@ export PROMETHEUS_RESOURCE_ATTRIBUTES="service.name,service.namespace"
   or `random`. Return the status code specified in the `status` parameter, e.g.
   `?status=200`.
 - `/timeout`: Wait the given amount of time (`?timeout=1m`) before returning a
-  200 status code.
+  200 status code. The optional `flush` parameter (`?timeout=10s&flush=2s`)
+  writes and flushes a message in the given interval while waiting.
 - `/headersize`: Returns a 200 status code with a header `X-Header-Size` of the
   size defined via `?size=1024`.
 - `/request`: Returns the response of the requested server. The request body
@@ -119,14 +120,17 @@ export PROMETHEUS_RESOURCE_ATTRIBUTES="service.name,service.namespace"
     (`?type=block&duration=10s&workers=100`).
 - `/websocket`: Can be used to test WebSocket connections. It returns the
   message sent over the WebSocket connection.
-- `/metrics`: Returns the captured Prometheus metrics.
+- `/metrics`: Returns the captured Prometheus metrics, when the
+  `OTEL_METRICS_EXPORTER` environment variable is set to `prometheus`.
+- `/debug/pprof/`: Exposes the pprof profiling endpoints (e.g.
+  `/debug/pprof/profile`, `/debug/pprof/heap`, `/debug/pprof/goroutine`).
 
 ### gRPC Endpoints
 
 - `Echoserver.Echo`: Echoes the message sent in the request.
 - `Echoserver.Status`: Returns a gRPC error with the status specified in the
   `status` field of the request or a random gRPC error when the value of the
-  `status` field is `random`.
+  `status` field is empty or `random`.
 - `Echoserver.Request`: Forwards the request to the specified gRPC endpoint and
   returns the response. The request message should have the following structure:
   `{"uri": "localhost:8081", "method": "Echoserver.Echo", "message": "{ \"message\": \"Hello\" }"}`
