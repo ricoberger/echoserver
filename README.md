@@ -105,6 +105,18 @@ export PROMETHEUS_RESOURCE_ATTRIBUTES="service.name,service.namespace"
 - `/fibonacci`: Returns the Fibonacci number for the given `n` parameter, e.g.
   `?n=100`. The intention behind this endpoint is to simulate a CPU-intensive
   task.
+- `/simulate`: Simulates some heavy work to exercise the collected profiles. The
+  simulation is selected via the `type` parameter and runs for the given
+  `duration` (e.g. `?duration=10s`). Valid types are:
+  - `cpu`: Keeps all CPUs busy (`?type=cpu&duration=10s`).
+  - `memory`: Allocates and retains `size` bytes of memory
+    (`?type=memory&duration=10s&size=268435456`).
+  - `goroutines`: Spawns `count` goroutines
+    (`?type=goroutines&duration=10s&count=1000`).
+  - `mutex`: Runs `workers` goroutines contending on a mutex
+    (`?type=mutex&duration=10s&workers=100`).
+  - `block`: Runs `workers` goroutines blocking on a channel
+    (`?type=block&duration=10s&workers=100`).
 - `/websocket`: Can be used to test WebSocket connections. It returns the
   message sent over the WebSocket connection.
 - `/metrics`: Returns the captured Prometheus metrics.
@@ -118,6 +130,13 @@ export PROMETHEUS_RESOURCE_ATTRIBUTES="service.name,service.namespace"
 - `Echoserver.Request`: Forwards the request to the specified gRPC endpoint and
   returns the response. The request message should have the following structure:
   `{"uri": "localhost:8081", "method": "Echoserver.Echo", "message": "{ \"message\": \"Hello\" }"}`
+- `Echoserver.Simulate`: Simulates some heavy work to exercise the collected
+  profiles. The simulation is selected via the `type` field (`cpu`, `memory`,
+  `goroutines`, `mutex` or `block`) and runs for the given `duration`. Depending
+  on the type the `size` (`memory`), `count` (`goroutines`) or `workers`
+  (`mutex` and `block`) field is required, e.g.
+  `{"type": "cpu", "duration": "10s"}` or
+  `{"type": "memory", "duration": "10s", "size": 268435456}`.
 
 ### Examples
 
@@ -130,6 +149,9 @@ curl -vvv "http://localhost:8080/timeout?timeout=10s&flush=2s"
 curl -vvv "http://localhost:8080/headersize?size=100"
 curl -vvv -X POST -d '{"method": "POST", "url": "http://localhost:8080/", "body": "test", "headers": {"x-test": "test"}}' http://localhost:8080/request
 curl -vvv "http://localhost:8080/fibonacci?n=100"
+curl -vvv "http://localhost:8080/simulate?type=cpu&duration=10s"
+curl -vvv "http://localhost:8080/simulate?type=memory&duration=10s&size=268435456"
+curl -vvv "http://localhost:8080/simulate?type=goroutines&duration=10s&count=1000"
 ```
 
 ```sh
@@ -137,6 +159,8 @@ grpcurl -format-error -plaintext -d '{ "message": "Hello" }' 'localhost:8081' Ec
 grpcurl -format-error -plaintext -d '{ "status": "random" }' 'localhost:8081' Echoserver.Status
 grpcurl -format-error -plaintext -d '{ "uri": "localhost:8081", "method": "Echoserver.Status", "message": "{ \"status\": \"random\" }" }' 'localhost:8081' Echoserver.Request
 grpcurl -format-error -plaintext -d '{ "uri": "localhost:8081", "method": "Echoserver.Echo", "message": "{ \"message\": \"Hello\" }" }' 'localhost:8081' Echoserver.Request
+grpcurl -format-error -plaintext -d '{ "type": "cpu", "duration": "10s" }' 'localhost:8081' Echoserver.Simulate
+grpcurl -format-error -plaintext -d '{ "type": "memory", "duration": "10s", "size": 268435456 }' 'localhost:8081' Echoserver.Simulate
 
 # List endpoints, list methods for a specific endpoint and describe a method
 grpcurl -plaintext 'localhost:8081' list

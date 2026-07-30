@@ -6,6 +6,7 @@ service Echoserver {
   rpc Echo (EchoRequest) returns (EchoResponse) {}
   rpc Status (StatusRequest) returns (StatusResponse) {}
   rpc Request (RequestRequest) returns (RequestResponse) {}
+  rpc Simulate (SimulateRequest) returns (SimulateResponse) {}
 }
 
 message EchoRequest {
@@ -33,4 +34,16 @@ message RequestRequest {
 
 message RequestResponse {
   string message = 2;
+}
+
+message SimulateRequest {
+  string type = 1;
+  string duration = 2;
+  int64 size = 3;
+  int64 count = 4;
+  int64 workers = 5;
+}
+
+message SimulateResponse {
+  string message = 1;
 }

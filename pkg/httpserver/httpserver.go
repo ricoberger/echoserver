@@ -64,6 +64,7 @@ func New(config Config) Server {
 	mux.HandleFunc("/headersize", headerSizeHandler)
 	mux.HandleFunc("/request", requestHandler)
 	mux.HandleFunc("/fibonacci", fibonacciHandler)
+	mux.HandleFunc("/simulate", simulateHandler)
 	mux.HandleFunc("/websocket", websocketHandler)
 	mux.HandleFunc("/debug/pprof", pprof.Index)
 	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
