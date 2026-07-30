@@ -167,3 +167,18 @@ grpcurl -plaintext 'localhost:8081' list
 grpcurl -plaintext 'localhost:8081' list Echoserver
 grpcurl -plaintext 'localhost:8081' describe Echoserver.Echo
 ```
+
+## Load Testing
+
+The `hack/loadtest.sh` script generates load against a running `echoserver` by
+repeatedly calling all of its HTTP and gRPC endpoints. It is useful for
+producing telemetry (metrics, logs, traces and profiles) to test the
+instrumentation. It only requires `curl` and, for the gRPC endpoints, `grpcurl`.
+
+```sh
+# Run against a local echoserver for 60s with 4 parallel workers.
+./hack/loadtest.sh
+
+# Customize the run via environment variables.
+DURATION=120 CONCURRENCY=8 HTTP_ADDRESS=localhost:8080 GRPC_ADDRESS=localhost:8081 ./hack/loadtest.sh
+```
