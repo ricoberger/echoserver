@@ -8,15 +8,18 @@ import (
 	"log/slog"
 	"math/big"
 	"strings"
+	"time"
 
 	"github.com/ricoberger/echoserver/pkg/grpcserver/middleware/requestid"
 	pb "github.com/ricoberger/echoserver/pkg/grpcserver/proto"
+	"github.com/ricoberger/echoserver/pkg/simulate"
 
 	"github.com/fullstorydev/grpcurl"
 	"github.com/jhump/protoreflect/grpcreflect"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	grpccodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -167,4 +170,76 @@ func (e *echoserver) Request(ctx context.Context, r *pb.RequestRequest) (*pb.Req
 	return &pb.RequestResponse{
 		Message: output.String(),
 	}, grpcstatus.Error(h.Status.Code(), h.Status.Message())
+}
+
+// simulateInvalidArgument logs the given error, records it on the span and
+// returns a gRPC InvalidArgument error.
+func (e *echoserver) simulateInvalidArgument(ctx context.Context, span trace.Span, message string, err error) error {
+	slog.ErrorContext(ctx, message, slog.Any("error", err))
+	span.RecordError(err)
+	span.SetStatus(codes.Error, err.Error())
+
+	return grpcstatus.Error(grpccodes.InvalidArgument, err.Error())
+}
+
+func (e *echoserver) Simulate(ctx context.Context, r *pb.SimulateRequest) (*pb.SimulateResponse, error) {
+	ctx, span := tracer.Start(ctx, "Simulate")
+	defer span.End()
+	span.SetAttributes(attribute.Key("type").String(r.GetType()))
+	span.SetAttributes(attribute.Key("duration").String(r.GetDuration()))
+	slog.DebugContext(ctx, "Simulate request received.", slog.String("type", r.GetType()), slog.String("duration", r.GetDuration()))
+
+	if r.GetType() == "" {
+		return &pb.SimulateResponse{}, e.simulateInvalidArgument(ctx, span, "Parameter 'type' is missing.", fmt.Errorf("type parameter is missing"))
+	}
+
+	if r.GetDuration() == "" {
+		return &pb.SimulateResponse{}, e.simulateInvalidArgument(ctx, span, "Parameter 'duration' is missing.", fmt.Errorf("duration parameter is missing"))
+	}
+
+	duration, err := time.ParseDuration(r.GetDuration())
+	if err != nil {
+		return &pb.SimulateResponse{}, e.simulateInvalidArgument(ctx, span, "Failed to parse 'duration' parameter.", err)
+	}
+
+	var message string
+	switch r.GetType() {
+	case "cpu":
+		simulate.CPU(ctx, duration)
+		message = fmt.Sprintf("simulated %q for %s", r.GetType(), duration)
+	case "memory":
+		if r.GetSize() <= 0 {
+			return &pb.SimulateResponse{}, e.simulateInvalidArgument(ctx, span, "Invalid 'size' parameter.", fmt.Errorf("size parameter is missing"))
+		}
+		span.SetAttributes(attribute.Key("size").Int64(r.GetSize()))
+		simulate.Memory(ctx, duration, int(r.GetSize()))
+		message = fmt.Sprintf("simulated %q for %s (%d bytes)", r.GetType(), duration, r.GetSize())
+	case "goroutines":
+		if r.GetCount() <= 0 {
+			return &pb.SimulateResponse{}, e.simulateInvalidArgument(ctx, span, "Invalid 'count' parameter.", fmt.Errorf("count parameter is missing"))
+		}
+		span.SetAttributes(attribute.Key("count").Int64(r.GetCount()))
+		simulate.Goroutines(ctx, duration, int(r.GetCount()))
+		message = fmt.Sprintf("simulated %q for %s (%d goroutines)", r.GetType(), duration, r.GetCount())
+	case "mutex":
+		if r.GetWorkers() <= 0 {
+			return &pb.SimulateResponse{}, e.simulateInvalidArgument(ctx, span, "Invalid 'workers' parameter.", fmt.Errorf("workers parameter is missing"))
+		}
+		span.SetAttributes(attribute.Key("workers").Int64(r.GetWorkers()))
+		simulate.Mutex(ctx, duration, int(r.GetWorkers()))
+		message = fmt.Sprintf("simulated %q for %s (%d workers)", r.GetType(), duration, r.GetWorkers())
+	case "block":
+		if r.GetWorkers() <= 0 {
+			return &pb.SimulateResponse{}, e.simulateInvalidArgument(ctx, span, "Invalid 'workers' parameter.", fmt.Errorf("workers parameter is missing"))
+		}
+		span.SetAttributes(attribute.Key("workers").Int64(r.GetWorkers()))
+		simulate.Block(ctx, duration, int(r.GetWorkers()))
+		message = fmt.Sprintf("simulated %q for %s (%d workers)", r.GetType(), duration, r.GetWorkers())
+	default:
+		return &pb.SimulateResponse{}, e.simulateInvalidArgument(ctx, span, "Unknown simulation type.", fmt.Errorf("unknown simulation type %q", r.GetType()))
+	}
+
+	return &pb.SimulateResponse{
+		Message: message,
+	}, nil
 }

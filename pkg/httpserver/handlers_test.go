@@ -243,6 +243,93 @@ func TestFibonacciHandler(t *testing.T) {
 	})
 }
 
+func TestSimulateHandler(t *testing.T) {
+	t.Run("should simulate each type", func(t *testing.T) {
+		for _, simulationType := range []string{"cpu", "memory", "goroutines", "mutex", "block"} {
+			query := "type=" + simulationType + "&duration=10ms&size=1024&count=4&workers=4"
+
+			req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/?"+query, nil)
+			w := httptest.NewRecorder()
+
+			mux := http.NewServeMux()
+			mux.HandleFunc("/", simulateHandler)
+			mux.ServeHTTP(w, req)
+
+			body, err := io.ReadAll(w.Body)
+			require.NoError(t, err)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			require.Contains(t, string(body), simulationType)
+		}
+	})
+
+	t.Run("should return error when type parameter is missing", func(t *testing.T) {
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/?duration=10ms", nil)
+		w := httptest.NewRecorder()
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/", simulateHandler)
+		mux.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("should return error when type is unknown", func(t *testing.T) {
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/?type=invalid&duration=10ms", nil)
+		w := httptest.NewRecorder()
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/", simulateHandler)
+		mux.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("should return error when duration parameter is missing", func(t *testing.T) {
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/?type=cpu", nil)
+		w := httptest.NewRecorder()
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/", simulateHandler)
+		mux.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("should return error when duration parameter is invalid", func(t *testing.T) {
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/?type=cpu&duration=invalid", nil)
+		w := httptest.NewRecorder()
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/", simulateHandler)
+		mux.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("should return error when required magnitude parameter is missing", func(t *testing.T) {
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/?type=memory&duration=10ms", nil)
+		w := httptest.NewRecorder()
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/", simulateHandler)
+		mux.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("should return error when required magnitude parameter is invalid", func(t *testing.T) {
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/?type=goroutines&duration=10ms&count=invalid", nil)
+		w := httptest.NewRecorder()
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/", simulateHandler)
+		mux.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+}
+
 func TestWebsocketHandler(t *testing.T) {
 	t.Run("should echo messages over websocket", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(websocketHandler))

@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
@@ -14,12 +15,14 @@ import (
 	"time"
 
 	"github.com/ricoberger/echoserver/pkg/httpserver/middleware/requestid"
+	"github.com/ricoberger/echoserver/pkg/simulate"
 
 	"github.com/gorilla/websocket"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func echoHandler(w http.ResponseWriter, r *http.Request) {
@@ -316,6 +319,108 @@ func fibonacciHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(res.String()))
+}
+
+// writeSimulateBadRequest logs the given error, records it on the span and
+// writes a 400 Bad Request response.
+func writeSimulateBadRequest(ctx context.Context, w http.ResponseWriter, span trace.Span, message string, err error) {
+	slog.ErrorContext(ctx, message, slog.Any("error", err))
+	span.RecordError(err)
+	span.SetStatus(codes.Error, err.Error())
+
+	http.Error(w, err.Error(), http.StatusBadRequest)
+}
+
+// parseRequiredIntParam parses a required integer query parameter. It returns
+// an error when the parameter is missing or can not be parsed.
+func parseRequiredIntParam(r *http.Request, name string) (int, error) {
+	value := r.URL.Query().Get(name)
+	if value == "" {
+		return 0, fmt.Errorf("%s parameter is missing", name)
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse '%s' parameter: %w", name, err)
+	}
+
+	return parsed, nil
+}
+
+func simulateHandler(w http.ResponseWriter, r *http.Request) {
+	ctx, span := tracer.Start(r.Context(), "simulateHandler")
+	defer span.End()
+	span.SetAttributes(attribute.Key("http.parameter.type").String(r.URL.Query().Get("type")))
+	span.SetAttributes(attribute.Key("http.parameter.duration").String(r.URL.Query().Get("duration")))
+	slog.DebugContext(ctx, "Handling simulate request.", slog.String("type", r.URL.Query().Get("type")), slog.String("duration", r.URL.Query().Get("duration")))
+
+	simulationType := r.URL.Query().Get("type")
+	if simulationType == "" {
+		writeSimulateBadRequest(ctx, w, span, "Parameter 'type' is missing.", fmt.Errorf("type parameter is missing"))
+		return
+	}
+
+	durationString := r.URL.Query().Get("duration")
+	if durationString == "" {
+		writeSimulateBadRequest(ctx, w, span, "Parameter 'duration' is missing.", fmt.Errorf("duration parameter is missing"))
+		return
+	}
+
+	duration, err := time.ParseDuration(durationString)
+	if err != nil {
+		writeSimulateBadRequest(ctx, w, span, "Failed to parse 'duration' parameter.", err)
+		return
+	}
+
+	var message string
+	switch simulationType {
+	case "cpu":
+		simulate.CPU(ctx, duration)
+		message = fmt.Sprintf("simulated %q for %s", simulationType, duration)
+	case "memory":
+		size, err := parseRequiredIntParam(r, "size")
+		if err != nil {
+			writeSimulateBadRequest(ctx, w, span, "Invalid 'size' parameter.", err)
+			return
+		}
+		span.SetAttributes(attribute.Key("http.parameter.size").Int(size))
+		simulate.Memory(ctx, duration, size)
+		message = fmt.Sprintf("simulated %q for %s (%d bytes)", simulationType, duration, size)
+	case "goroutines":
+		count, err := parseRequiredIntParam(r, "count")
+		if err != nil {
+			writeSimulateBadRequest(ctx, w, span, "Invalid 'count' parameter.", err)
+			return
+		}
+		span.SetAttributes(attribute.Key("http.parameter.count").Int(count))
+		simulate.Goroutines(ctx, duration, count)
+		message = fmt.Sprintf("simulated %q for %s (%d goroutines)", simulationType, duration, count)
+	case "mutex":
+		workers, err := parseRequiredIntParam(r, "workers")
+		if err != nil {
+			writeSimulateBadRequest(ctx, w, span, "Invalid 'workers' parameter.", err)
+			return
+		}
+		span.SetAttributes(attribute.Key("http.parameter.workers").Int(workers))
+		simulate.Mutex(ctx, duration, workers)
+		message = fmt.Sprintf("simulated %q for %s (%d workers)", simulationType, duration, workers)
+	case "block":
+		workers, err := parseRequiredIntParam(r, "workers")
+		if err != nil {
+			writeSimulateBadRequest(ctx, w, span, "Invalid 'workers' parameter.", err)
+			return
+		}
+		span.SetAttributes(attribute.Key("http.parameter.workers").Int(workers))
+		simulate.Block(ctx, duration, workers)
+		message = fmt.Sprintf("simulated %q for %s (%d workers)", simulationType, duration, workers)
+	default:
+		writeSimulateBadRequest(ctx, w, span, "Unknown simulation type.", fmt.Errorf("unknown simulation type %q", simulationType))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	//nolint:gosec
+	w.Write([]byte(message))
 }
 
 var upgrader = websocket.Upgrader{}
