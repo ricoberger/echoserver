@@ -41,9 +41,9 @@ func NewEchoserver() Echoserver {
 }
 
 func (e *echoserver) Echo(ctx context.Context, r *pb.EchoRequest) (*pb.EchoResponse, error) {
-	_, span := tracer.Start(ctx, "Echo")
+	ctx, span := tracer.Start(ctx, "Echo")
 	defer span.End()
-	span.SetAttributes(attribute.Key("message").String(r.GetMessage()))
+	span.SetAttributes(attribute.Key("rpc.parameter.message").String(r.GetMessage()))
 	slog.DebugContext(ctx, "Echo request received.", slog.String("message", r.GetMessage()))
 
 	return &pb.EchoResponse{
@@ -52,9 +52,9 @@ func (e *echoserver) Echo(ctx context.Context, r *pb.EchoRequest) (*pb.EchoRespo
 }
 
 func (e *echoserver) Status(ctx context.Context, r *pb.StatusRequest) (*pb.StatusResponse, error) {
-	_, span := tracer.Start(ctx, "Status")
+	ctx, span := tracer.Start(ctx, "Status")
 	defer span.End()
-	span.SetAttributes(attribute.Key("status").String(r.GetStatus()))
+	span.SetAttributes(attribute.Key("rpc.parameter.status").String(r.GetStatus()))
 	slog.DebugContext(ctx, "Status request received.", slog.String("status", r.GetStatus()))
 
 	randomStatusCodes := []grpccodes.Code{grpccodes.OK, grpccodes.OK, grpccodes.OK, grpccodes.OK, grpccodes.OK, grpccodes.InvalidArgument, grpccodes.NotFound, grpccodes.Internal, grpccodes.Unavailable}
@@ -62,11 +62,7 @@ func (e *echoserver) Status(ctx context.Context, r *pb.StatusRequest) (*pb.Statu
 	if r.GetStatus() == "" || r.GetStatus() == "random" {
 		index, err := rand.Int(rand.Reader, big.NewInt(int64(len(randomStatusCodes))))
 		if err != nil {
-			slog.ErrorContext(ctx, "Failed to generate random index.", slog.Any("error", err))
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-
-			return &pb.StatusResponse{}, grpcstatus.Error(grpccodes.Internal, err.Error())
+			return &pb.StatusResponse{}, e.handleError(ctx, span, grpccodes.Internal, "Failed to generate random index.", err)
 		}
 
 		status := randomStatusCodes[index.Int64()]
@@ -98,18 +94,21 @@ func (e *echoserver) Status(ctx context.Context, r *pb.StatusRequest) (*pb.Statu
 		return &pb.StatusResponse{}, grpcstatus.Error(status, status.String())
 	}
 
-	return &pb.StatusResponse{}, grpcstatus.Error(grpccodes.Internal, "Unknown status parameter")
+	return &pb.StatusResponse{}, e.handleError(ctx, span, grpccodes.Internal, "Invalid 'status' parameter.", fmt.Errorf("unknown status %q", r.GetStatus()))
 }
 
 func (e *echoserver) Request(ctx context.Context, r *pb.RequestRequest) (*pb.RequestResponse, error) {
-	_, span := tracer.Start(ctx, "Request")
+	ctx, span := tracer.Start(ctx, "Request")
 	defer span.End()
-	span.SetAttributes(attribute.Key("uri").String(r.GetUri()))
-	span.SetAttributes(attribute.Key("method").String(r.GetMethod()))
-	span.SetAttributes(attribute.Key("message").String(r.GetMessage()))
+	span.SetAttributes(attribute.Key("rpc.parameter.uri").String(r.GetUri()))
+	span.SetAttributes(attribute.Key("rpc.parameter.method").String(r.GetMethod()))
+	span.SetAttributes(attribute.Key("rpc.parameter.message").String(r.GetMessage()))
 	slog.DebugContext(ctx, "Request request received.", slog.String("uri", r.GetUri()), slog.String("method", r.GetMethod()), slog.String("message", r.GetMessage()))
 
-	conn, _ := grpc.NewClient(r.GetUri(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
+	conn, err := grpc.NewClient(r.GetUri(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
+	if err != nil {
+		return &pb.RequestResponse{}, e.handleError(ctx, span, grpccodes.Internal, "Failed to create grpc client.", err)
+	}
 	defer conn.Close()
 
 	reflectionClient := grpcreflect.NewClientV1(ctx, rpb.NewServerReflectionClient(conn))
@@ -122,8 +121,7 @@ func (e *echoserver) Request(ctx context.Context, r *pb.RequestRequest) (*pb.Req
 		grpcurl.FormatOptions{EmitJSONDefaultFields: true},
 	)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to create request parser and formatter.", slog.Any("error", err))
-		return &pb.RequestResponse{}, grpcstatus.Error(grpccodes.Internal, err.Error())
+		return &pb.RequestResponse{}, e.handleError(ctx, span, grpccodes.Internal, "Failed to create request parser and formatter.", err)
 	}
 
 	var output bytes.Buffer
@@ -162,8 +160,7 @@ func (e *echoserver) Request(ctx context.Context, r *pb.RequestRequest) (*pb.Req
 		if errStatus, ok := grpcstatus.FromError(err); ok {
 			h.Status = errStatus
 		} else {
-			slog.ErrorContext(ctx, "Invoke failed.", slog.Any("error", err))
-			return &pb.RequestResponse{}, grpcstatus.Error(grpccodes.Internal, err.Error())
+			return &pb.RequestResponse{}, e.handleError(ctx, span, grpccodes.Internal, "Invoke failed.", err)
 		}
 	}
 
@@ -172,34 +169,34 @@ func (e *echoserver) Request(ctx context.Context, r *pb.RequestRequest) (*pb.Req
 	}, grpcstatus.Error(h.Status.Code(), h.Status.Message())
 }
 
-// simulateInvalidArgument logs the given error, records it on the span and
-// returns a gRPC InvalidArgument error.
-func (e *echoserver) simulateInvalidArgument(ctx context.Context, span trace.Span, message string, err error) error {
+// handleError logs the given error, records it on the span and returns a gRPC
+// error with the given status code.
+func (e *echoserver) handleError(ctx context.Context, span trace.Span, code grpccodes.Code, message string, err error) error {
 	slog.ErrorContext(ctx, message, slog.Any("error", err))
 	span.RecordError(err)
 	span.SetStatus(codes.Error, err.Error())
 
-	return grpcstatus.Error(grpccodes.InvalidArgument, err.Error())
+	return grpcstatus.Error(code, err.Error())
 }
 
 func (e *echoserver) Simulate(ctx context.Context, r *pb.SimulateRequest) (*pb.SimulateResponse, error) {
 	ctx, span := tracer.Start(ctx, "Simulate")
 	defer span.End()
-	span.SetAttributes(attribute.Key("type").String(r.GetType()))
-	span.SetAttributes(attribute.Key("duration").String(r.GetDuration()))
+	span.SetAttributes(attribute.Key("rpc.parameter.type").String(r.GetType()))
+	span.SetAttributes(attribute.Key("rpc.parameter.duration").String(r.GetDuration()))
 	slog.DebugContext(ctx, "Simulate request received.", slog.String("type", r.GetType()), slog.String("duration", r.GetDuration()))
 
 	if r.GetType() == "" {
-		return &pb.SimulateResponse{}, e.simulateInvalidArgument(ctx, span, "Parameter 'type' is missing.", fmt.Errorf("type parameter is missing"))
+		return &pb.SimulateResponse{}, e.handleError(ctx, span, grpccodes.InvalidArgument, "Invalid 'type' parameter.", fmt.Errorf("type parameter is missing"))
 	}
 
 	if r.GetDuration() == "" {
-		return &pb.SimulateResponse{}, e.simulateInvalidArgument(ctx, span, "Parameter 'duration' is missing.", fmt.Errorf("duration parameter is missing"))
+		return &pb.SimulateResponse{}, e.handleError(ctx, span, grpccodes.InvalidArgument, "Invalid 'duration' parameter.", fmt.Errorf("duration parameter is missing"))
 	}
 
 	duration, err := time.ParseDuration(r.GetDuration())
 	if err != nil {
-		return &pb.SimulateResponse{}, e.simulateInvalidArgument(ctx, span, "Failed to parse 'duration' parameter.", err)
+		return &pb.SimulateResponse{}, e.handleError(ctx, span, grpccodes.InvalidArgument, "Invalid 'duration' parameter.", fmt.Errorf("failed to parse 'duration' parameter: %w", err))
 	}
 
 	var message string
@@ -209,34 +206,34 @@ func (e *echoserver) Simulate(ctx context.Context, r *pb.SimulateRequest) (*pb.S
 		message = fmt.Sprintf("simulated %q for %s", r.GetType(), duration)
 	case "memory":
 		if r.GetSize() <= 0 {
-			return &pb.SimulateResponse{}, e.simulateInvalidArgument(ctx, span, "Invalid 'size' parameter.", fmt.Errorf("size parameter is missing"))
+			return &pb.SimulateResponse{}, e.handleError(ctx, span, grpccodes.InvalidArgument, "Invalid 'size' parameter.", fmt.Errorf("size parameter must be greater than zero"))
 		}
-		span.SetAttributes(attribute.Key("size").Int64(r.GetSize()))
+		span.SetAttributes(attribute.Key("rpc.parameter.size").Int64(r.GetSize()))
 		simulate.Memory(ctx, duration, int(r.GetSize()))
 		message = fmt.Sprintf("simulated %q for %s (%d bytes)", r.GetType(), duration, r.GetSize())
 	case "goroutines":
 		if r.GetCount() <= 0 {
-			return &pb.SimulateResponse{}, e.simulateInvalidArgument(ctx, span, "Invalid 'count' parameter.", fmt.Errorf("count parameter is missing"))
+			return &pb.SimulateResponse{}, e.handleError(ctx, span, grpccodes.InvalidArgument, "Invalid 'count' parameter.", fmt.Errorf("count parameter must be greater than zero"))
 		}
-		span.SetAttributes(attribute.Key("count").Int64(r.GetCount()))
+		span.SetAttributes(attribute.Key("rpc.parameter.count").Int64(r.GetCount()))
 		simulate.Goroutines(ctx, duration, int(r.GetCount()))
 		message = fmt.Sprintf("simulated %q for %s (%d goroutines)", r.GetType(), duration, r.GetCount())
 	case "mutex":
 		if r.GetWorkers() <= 0 {
-			return &pb.SimulateResponse{}, e.simulateInvalidArgument(ctx, span, "Invalid 'workers' parameter.", fmt.Errorf("workers parameter is missing"))
+			return &pb.SimulateResponse{}, e.handleError(ctx, span, grpccodes.InvalidArgument, "Invalid 'workers' parameter.", fmt.Errorf("workers parameter must be greater than zero"))
 		}
-		span.SetAttributes(attribute.Key("workers").Int64(r.GetWorkers()))
+		span.SetAttributes(attribute.Key("rpc.parameter.workers").Int64(r.GetWorkers()))
 		simulate.Mutex(ctx, duration, int(r.GetWorkers()))
 		message = fmt.Sprintf("simulated %q for %s (%d workers)", r.GetType(), duration, r.GetWorkers())
 	case "block":
 		if r.GetWorkers() <= 0 {
-			return &pb.SimulateResponse{}, e.simulateInvalidArgument(ctx, span, "Invalid 'workers' parameter.", fmt.Errorf("workers parameter is missing"))
+			return &pb.SimulateResponse{}, e.handleError(ctx, span, grpccodes.InvalidArgument, "Invalid 'workers' parameter.", fmt.Errorf("workers parameter must be greater than zero"))
 		}
-		span.SetAttributes(attribute.Key("workers").Int64(r.GetWorkers()))
+		span.SetAttributes(attribute.Key("rpc.parameter.workers").Int64(r.GetWorkers()))
 		simulate.Block(ctx, duration, int(r.GetWorkers()))
 		message = fmt.Sprintf("simulated %q for %s (%d workers)", r.GetType(), duration, r.GetWorkers())
 	default:
-		return &pb.SimulateResponse{}, e.simulateInvalidArgument(ctx, span, "Unknown simulation type.", fmt.Errorf("unknown simulation type %q", r.GetType()))
+		return &pb.SimulateResponse{}, e.handleError(ctx, span, grpccodes.InvalidArgument, "Unknown simulation type.", fmt.Errorf("unknown simulation type %q", r.GetType()))
 	}
 
 	return &pb.SimulateResponse{

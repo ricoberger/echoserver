@@ -42,6 +42,7 @@ func (s *server) Start() {
 	listener, err := listenConfig.Listen(context.Background(), "tcp", s.address)
 	if err != nil {
 		slog.Error("Failed to create listener.", slog.Any("error", err))
+		return
 	}
 	slog.Info("Start server...", slog.String("address", listener.Addr().String()))
 

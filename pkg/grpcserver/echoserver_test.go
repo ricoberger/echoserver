@@ -138,4 +138,15 @@ func TestRequest(t *testing.T) {
 		})
 		require.Error(t, err)
 	})
+
+	t.Run("should return an error for an invalid uri", func(t *testing.T) {
+		require.NotPanics(t, func() {
+			_, err := e.Request(context.Background(), &pb.RequestRequest{
+				Uri:     "unknown-scheme://invalid",
+				Method:  "Echoserver.Echo",
+				Message: `{}`,
+			})
+			require.Error(t, err)
+		})
+	})
 }

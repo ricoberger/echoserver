@@ -1,6 +1,6 @@
 FROM golang:1.26.4 AS build
 WORKDIR /echoserver
-COPY go.mod  ./
+COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 RUN export CGO_ENABLED=0 && make build
