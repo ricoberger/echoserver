@@ -76,6 +76,10 @@ export LOG_FORMAT="console"
 export LOG_LEVEL="INFO"
 export LOG_RESOURCE_ATTRIBUTES="true"
 
+# When "OTEL_METRICS_EXPORTER" is set to "prometheus", the following environment
+# variables can be used to configure the Prometheus metrics:
+export PROMETHEUS_RESOURCE_ATTRIBUTES="service.name,service.namespace"
+
 # When "OTEL_PROFILES_EXPORTER" is set to "pyroscope", the following environment
 # variables are required:
 # - PYROSCOPE_SERVER_ADDRESS: The address of the Pyroscope server.
