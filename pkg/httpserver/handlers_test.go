@@ -65,6 +65,17 @@ func TestHealthHandler(t *testing.T) {
 	})
 }
 
+func TestPanicHandler(t *testing.T) {
+	t.Run("should panic", func(t *testing.T) {
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+		w := httptest.NewRecorder()
+
+		require.Panics(t, func() {
+			panicHandler(w, req)
+		})
+	})
+}
+
 func TestStatusHandler(t *testing.T) {
 	t.Run("should return random status code", func(t *testing.T) {
 		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
@@ -110,6 +121,22 @@ func TestTimeouthandler(t *testing.T) {
 		mux.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("should flush while waiting for the timeout", func(t *testing.T) {
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/?timeout=200ms&flush=40ms", nil)
+		w := httptest.NewRecorder()
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/", timeoutHandler)
+		mux.ServeHTTP(w, req)
+
+		body, err := io.ReadAll(w.Body)
+		require.NoError(t, err)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Contains(t, string(body), http.StatusText(http.StatusProcessing))
+		require.Contains(t, string(body), http.StatusText(http.StatusOK))
 	})
 
 	t.Run("should return error when timeout parameter is missing", func(t *testing.T) {
@@ -179,6 +206,27 @@ func TestRequest(t *testing.T) {
 		defer server.Close()
 
 		req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, "/", strings.NewReader(fmt.Sprintf(`{"method":"GET","url":"%s"}`, server.URL)))
+		w := httptest.NewRecorder()
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/", requestHandler)
+		mux.ServeHTTP(w, req)
+
+		body, err := io.ReadAll(w.Body)
+		require.NoError(t, err)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, "test data", string(body))
+	})
+
+	t.Run("should return response when http client options are provided", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, "test data")
+		}))
+		defer server.Close()
+
+		requestBody := fmt.Sprintf(`{"method":"GET","url":"%s","httpClientOptions":{"timeout":"5s","transport":{"disableKeepAlives":true,"maxIdleConns":10}}}`, server.URL)
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, "/", strings.NewReader(requestBody))
 		w := httptest.NewRecorder()
 
 		mux := http.NewServeMux()
@@ -347,5 +395,14 @@ func TestWebsocketHandler(t *testing.T) {
 		_, response, err := client.ReadMessage()
 		require.NoError(t, err)
 		require.Equal(t, "test", string(response))
+	})
+
+	t.Run("should fail to upgrade a non-websocket request", func(t *testing.T) {
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+		w := httptest.NewRecorder()
+
+		websocketHandler(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
 	})
 }
