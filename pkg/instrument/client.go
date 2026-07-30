@@ -208,8 +208,16 @@ func newMeterProvider(ctx context.Context, defaultResource *resource.Resource) (
 			metric.WithResource(defaultResource),
 		), nil
 	case "prometheus":
+		var resourceAttributes []attribute.Key
+		for value := range strings.SplitSeq(os.Getenv("PROMETHEUS_RESOURCE_ATTRIBUTES"), ",") {
+			resourceAttributes = append(resourceAttributes, attribute.Key(value))
+		}
+
 		exp, err := promexp.New(
 			promexp.WithoutScopeInfo(),
+			promexp.WithResourceAsConstantLabels(attribute.NewAllowKeysFilter(
+				resourceAttributes...,
+			)),
 		)
 		if err != nil {
 			return nil, err
