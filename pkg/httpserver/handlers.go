@@ -1,7 +1,6 @@
 package httpserver
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
@@ -22,7 +21,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/trace"
 )
 
 func echoHandler(w http.ResponseWriter, r *http.Request) {
@@ -31,11 +29,7 @@ func echoHandler(w http.ResponseWriter, r *http.Request) {
 
 	dump, err := httputil.DumpRequest(r, true)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to dump request.", slog.Any("error", err))
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-
-		http.Error(w, fmt.Sprint(err), http.StatusInternalServerError)
+		handleError(ctx, w, span, http.StatusInternalServerError, "Failed to dump request.", err)
 		return
 	}
 
@@ -71,11 +65,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 	if statusString == "" || statusString == "random" {
 		index, err := rand.Int(rand.Reader, big.NewInt(int64(len(randomStatusCodes))))
 		if err != nil {
-			slog.ErrorContext(ctx, "Failed to generate random index.", slog.Any("error", err))
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			handleError(ctx, w, span, http.StatusInternalServerError, "Failed to generate random index.", err)
 			return
 		}
 
@@ -88,11 +78,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 
 	status, err := strconv.Atoi(statusString)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to parse 'status' parameter.", slog.Any("error", err))
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handleError(ctx, w, span, http.StatusBadRequest, "Invalid 'status' parameter.", fmt.Errorf("failed to parse 'status' parameter: %w", err))
 		return
 	}
 
@@ -107,25 +93,9 @@ func timeoutHandler(w http.ResponseWriter, r *http.Request) {
 	span.SetAttributes(attribute.Key("http.parameter.flush").String(r.URL.Query().Get("flush")))
 	slog.DebugContext(ctx, "Handling timeout request.", slog.String("timeout", r.URL.Query().Get("timeout")), slog.String("flush", r.URL.Query().Get("flush")))
 
-	timeoutString := r.URL.Query().Get("timeout")
-	if timeoutString == "" {
-		err := fmt.Errorf("timeout parameter is missing")
-
-		slog.ErrorContext(ctx, "Parameter 'timeout' is missing.", slog.Any("error", err))
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	timeout, err := time.ParseDuration(timeoutString)
+	timeout, err := parseRequiredDurationParam(r, "timeout")
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to parse 'timeout' parameter.", slog.Any("error", err))
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handleError(ctx, w, span, http.StatusBadRequest, "Invalid 'timeout' parameter.", err)
 		return
 	}
 
@@ -173,25 +143,9 @@ func headerSizeHandler(w http.ResponseWriter, r *http.Request) {
 	span.SetAttributes(attribute.Key("http.parameter.size").String(r.URL.Query().Get("size")))
 	slog.DebugContext(ctx, "Handling header size request.", slog.String("size", r.URL.Query().Get("size")))
 
-	headerSizeString := r.URL.Query().Get("size")
-	if headerSizeString == "" {
-		err := fmt.Errorf("size parameter is missing")
-
-		slog.ErrorContext(ctx, "Parameter 'size' is missing.", slog.Any("error", err))
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	size, err := strconv.Atoi(headerSizeString)
+	size, err := parseRequiredIntParam(r, "size")
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to parse 'size' parameter.", slog.Any("error", err))
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handleError(ctx, w, span, http.StatusBadRequest, "Invalid 'size' parameter.", err)
 		return
 	}
 
@@ -214,11 +168,7 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 
 	var request Request
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		slog.ErrorContext(ctx, "Failed to decode request body.", slog.Any("error", err))
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handleError(ctx, w, span, http.StatusBadRequest, "Failed to decode request body.", err)
 		return
 	}
 
@@ -229,11 +179,7 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 
 	req, err := http.NewRequestWithContext(ctx, request.Method, request.URL, strings.NewReader(request.Body))
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to create http request.", slog.Any("error", err))
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handleError(ctx, w, span, http.StatusBadRequest, "Failed to create http request.", err)
 		return
 	}
 
@@ -248,11 +194,7 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := getHTTPClient(request.HTTPClientOptions).Do(req)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to do http request.", slog.Any("error", err))
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handleError(ctx, w, span, http.StatusBadRequest, "Failed to do http request.", err)
 		return
 	}
 
@@ -260,11 +202,7 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to read reespons body.", slog.Any("error", err))
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handleError(ctx, w, span, http.StatusBadRequest, "Failed to read response body.", err)
 		return
 	}
 
@@ -293,23 +231,13 @@ func fibonacciHandler(w http.ResponseWriter, r *http.Request) {
 
 	nString := r.URL.Query().Get("n")
 	if nString == "" {
-		err := fmt.Errorf("n parameter is missing")
-
-		slog.ErrorContext(ctx, "Parameter 'n' is missing.", slog.Any("error", err))
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handleError(ctx, w, span, http.StatusBadRequest, "Invalid 'n' parameter.", fmt.Errorf("n parameter is missing"))
 		return
 	}
 
 	n, err := strconv.ParseUint(nString, 10, 64)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to parse 'n' parameter.", slog.Any("error", err))
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		handleError(ctx, w, span, http.StatusBadRequest, "Invalid 'n' parameter.", fmt.Errorf("failed to parse 'n' parameter: %w", err))
 		return
 	}
 
@@ -321,32 +249,6 @@ func fibonacciHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(res.String()))
 }
 
-// writeSimulateBadRequest logs the given error, records it on the span and
-// writes a 400 Bad Request response.
-func writeSimulateBadRequest(ctx context.Context, w http.ResponseWriter, span trace.Span, message string, err error) {
-	slog.ErrorContext(ctx, message, slog.Any("error", err))
-	span.RecordError(err)
-	span.SetStatus(codes.Error, err.Error())
-
-	http.Error(w, err.Error(), http.StatusBadRequest)
-}
-
-// parseRequiredIntParam parses a required integer query parameter. It returns
-// an error when the parameter is missing or can not be parsed.
-func parseRequiredIntParam(r *http.Request, name string) (int, error) {
-	value := r.URL.Query().Get(name)
-	if value == "" {
-		return 0, fmt.Errorf("%s parameter is missing", name)
-	}
-
-	parsed, err := strconv.Atoi(value)
-	if err != nil {
-		return 0, fmt.Errorf("failed to parse '%s' parameter: %w", name, err)
-	}
-
-	return parsed, nil
-}
-
 func simulateHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, span := tracer.Start(r.Context(), "simulateHandler")
 	defer span.End()
@@ -356,19 +258,13 @@ func simulateHandler(w http.ResponseWriter, r *http.Request) {
 
 	simulationType := r.URL.Query().Get("type")
 	if simulationType == "" {
-		writeSimulateBadRequest(ctx, w, span, "Parameter 'type' is missing.", fmt.Errorf("type parameter is missing"))
+		handleError(ctx, w, span, http.StatusBadRequest, "Invalid 'type' parameter.", fmt.Errorf("type parameter is missing"))
 		return
 	}
 
-	durationString := r.URL.Query().Get("duration")
-	if durationString == "" {
-		writeSimulateBadRequest(ctx, w, span, "Parameter 'duration' is missing.", fmt.Errorf("duration parameter is missing"))
-		return
-	}
-
-	duration, err := time.ParseDuration(durationString)
+	duration, err := parseRequiredDurationParam(r, "duration")
 	if err != nil {
-		writeSimulateBadRequest(ctx, w, span, "Failed to parse 'duration' parameter.", err)
+		handleError(ctx, w, span, http.StatusBadRequest, "Invalid 'duration' parameter.", err)
 		return
 	}
 
@@ -380,7 +276,7 @@ func simulateHandler(w http.ResponseWriter, r *http.Request) {
 	case "memory":
 		size, err := parseRequiredIntParam(r, "size")
 		if err != nil {
-			writeSimulateBadRequest(ctx, w, span, "Invalid 'size' parameter.", err)
+			handleError(ctx, w, span, http.StatusBadRequest, "Invalid 'size' parameter.", err)
 			return
 		}
 		span.SetAttributes(attribute.Key("http.parameter.size").Int(size))
@@ -389,7 +285,7 @@ func simulateHandler(w http.ResponseWriter, r *http.Request) {
 	case "goroutines":
 		count, err := parseRequiredIntParam(r, "count")
 		if err != nil {
-			writeSimulateBadRequest(ctx, w, span, "Invalid 'count' parameter.", err)
+			handleError(ctx, w, span, http.StatusBadRequest, "Invalid 'count' parameter.", err)
 			return
 		}
 		span.SetAttributes(attribute.Key("http.parameter.count").Int(count))
@@ -398,7 +294,7 @@ func simulateHandler(w http.ResponseWriter, r *http.Request) {
 	case "mutex":
 		workers, err := parseRequiredIntParam(r, "workers")
 		if err != nil {
-			writeSimulateBadRequest(ctx, w, span, "Invalid 'workers' parameter.", err)
+			handleError(ctx, w, span, http.StatusBadRequest, "Invalid 'workers' parameter.", err)
 			return
 		}
 		span.SetAttributes(attribute.Key("http.parameter.workers").Int(workers))
@@ -407,14 +303,14 @@ func simulateHandler(w http.ResponseWriter, r *http.Request) {
 	case "block":
 		workers, err := parseRequiredIntParam(r, "workers")
 		if err != nil {
-			writeSimulateBadRequest(ctx, w, span, "Invalid 'workers' parameter.", err)
+			handleError(ctx, w, span, http.StatusBadRequest, "Invalid 'workers' parameter.", err)
 			return
 		}
 		span.SetAttributes(attribute.Key("http.parameter.workers").Int(workers))
 		simulate.Block(ctx, duration, workers)
 		message = fmt.Sprintf("simulated %q for %s (%d workers)", simulationType, duration, workers)
 	default:
-		writeSimulateBadRequest(ctx, w, span, "Unknown simulation type.", fmt.Errorf("unknown simulation type %q", simulationType))
+		handleError(ctx, w, span, http.StatusBadRequest, "Unknown simulation type.", fmt.Errorf("unknown simulation type %q", simulationType))
 		return
 	}
 
